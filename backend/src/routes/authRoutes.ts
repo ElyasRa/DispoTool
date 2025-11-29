@@ -21,11 +21,11 @@ const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, name } = req.body;
+    const { username, email, password, name, vorname } = req.body;
 
     // Validate input
-    if (!username || !email || !password || !name) {
-      res.status(400).json({ error: 'Username, email, password, and name are required' });
+    if (!username || !password || !name) {
+      res.status(400).json({ error: 'Username, password, and name are required' });
       return;
     }
 
@@ -35,8 +35,8 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate email format
-    if (!EMAIL_REGEX.test(email)) {
+    // Validate email format if provided
+    if (email && !EMAIL_REGEX.test(email)) {
       res.status(400).json({ error: 'Invalid email format' });
       return;
     }
@@ -48,16 +48,9 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     // Check if username already exists
-    const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+    const existingUsername = await query('SELECT id FROM users WHERE benutzername = $1', [username]);
     if (existingUsername.rows.length > 0) {
       res.status(409).json({ error: 'Username is already taken' });
-      return;
-    }
-
-    // Check if email already exists
-    const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existingEmail.rows.length > 0) {
-      res.status(409).json({ error: 'User with this email already exists' });
       return;
     }
 
@@ -65,17 +58,17 @@ router.post('/register', async (req: Request, res: Response) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Insert user into database
+    // Insert user into database using new schema
     const result = await query(
-      'INSERT INTO users (username, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, name, role',
-      [username, email, passwordHash, name, 'user']
+      'INSERT INTO users (benutzername, name, vorname, passwort, rolle, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, benutzername, name, vorname, rolle, status',
+      [username, name, vorname || '', passwordHash, 'disponent', 'active']
     );
 
     const user = result.rows[0];
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, username: user.username, email: user.email, role: user.role },
+      { id: user.id, username: user.benutzername, role: user.rolle },
       jwtSecret,
       { expiresIn: '24h' }
     );
@@ -84,10 +77,11 @@ router.post('/register', async (req: Request, res: Response) => {
       message: 'User registered successfully',
       user: {
         id: user.id,
-        username: user.username,
-        email: user.email,
+        username: user.benutzername,
         name: user.name,
-        role: user.role,
+        vorname: user.vorname,
+        role: user.rolle,
+        status: user.status,
       },
       token,
     });
@@ -108,9 +102,9 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    // Find user by username
+    // Find user by username (using new column name benutzername)
     const result = await query(
-      'SELECT id, username, email, password_hash, name, role FROM users WHERE username = $1',
+      'SELECT id, benutzername, passwort, name, vorname, rolle, status FROM users WHERE benutzername = $1',
       [username]
     );
 
@@ -121,8 +115,14 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const user = result.rows[0];
 
+    // Check if user is active
+    if (user.status === 'inactive') {
+      res.status(401).json({ error: 'User account is inactive' });
+      return;
+    }
+
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    const isValidPassword = await bcrypt.compare(password, user.passwort);
     if (!isValidPassword) {
       res.status(401).json({ error: 'Invalid username or password' });
       return;
@@ -130,7 +130,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, username: user.username, email: user.email, role: user.role },
+      { id: user.id, username: user.benutzername, role: user.rolle },
       jwtSecret,
       { expiresIn: '24h' }
     );
@@ -139,10 +139,11 @@ router.post('/login', async (req: Request, res: Response) => {
       message: 'Login successful',
       user: {
         id: user.id,
-        username: user.username,
-        email: user.email,
+        username: user.benutzername,
         name: user.name,
-        role: user.role,
+        vorname: user.vorname,
+        role: user.rolle,
+        status: user.status,
       },
       token,
     });
