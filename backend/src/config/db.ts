@@ -70,7 +70,7 @@ export const initializeDatabase = async () => {
         -- Rename role to rolle if rolle doesn't exist
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'rolle') THEN
           ALTER TABLE users ADD COLUMN rolle VARCHAR(50) DEFAULT 'disponent';
-          UPDATE users SET rolle = role WHERE rolle = 'disponent';
+          UPDATE users SET rolle = COALESCE(role, 'disponent') WHERE rolle IS NULL OR rolle = 'disponent';
         END IF;
         
         -- Add status column if not exists

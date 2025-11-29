@@ -12,16 +12,13 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 }
 const jwtSecret = JWT_SECRET || 'dev-secret-key-do-not-use-in-production';
 
-// Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 // Username validation regex (alphanumeric and underscores, 3-30 chars)
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, name, vorname } = req.body;
+    const { username, password, name, vorname } = req.body;
 
     // Validate input
     if (!username || !password || !name) {
@@ -32,12 +29,6 @@ router.post('/register', async (req: Request, res: Response) => {
     // Validate username format
     if (!USERNAME_REGEX.test(username)) {
       res.status(400).json({ error: 'Username must be 3-30 characters and contain only letters, numbers, and underscores' });
-      return;
-    }
-
-    // Validate email format if provided
-    if (email && !EMAIL_REGEX.test(email)) {
-      res.status(400).json({ error: 'Invalid email format' });
       return;
     }
 
