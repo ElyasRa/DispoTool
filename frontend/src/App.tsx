@@ -67,8 +67,22 @@ function App() {
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
     if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        // Validate user object structure
+        if (parsedUser && typeof parsedUser.id === 'number' && typeof parsedUser.email === 'string') {
+          setToken(savedToken);
+          setUser(parsedUser);
+        } else {
+          // Invalid user data, clear storage
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      } catch {
+        // Invalid JSON, clear storage
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
   }, []);
 

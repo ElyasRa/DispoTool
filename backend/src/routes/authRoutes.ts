@@ -5,7 +5,15 @@ import { query } from '../config/db';
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+// JWT_SECRET must be set in production
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET environment variable must be set in production');
+}
+const jwtSecret = JWT_SECRET || 'dev-secret-key-do-not-use-in-production';
+
+// Email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
@@ -15,6 +23,18 @@ router.post('/register', async (req: Request, res: Response) => {
     // Validate input
     if (!email || !password || !name) {
       res.status(400).json({ error: 'Email, password, and name are required' });
+      return;
+    }
+
+    // Validate email format
+    if (!EMAIL_REGEX.test(email)) {
+      res.status(400).json({ error: 'Invalid email format' });
+      return;
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      res.status(400).json({ error: 'Password must be at least 6 characters' });
       return;
     }
 
@@ -40,7 +60,7 @@ router.post('/register', async (req: Request, res: Response) => {
     // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
+      jwtSecret,
       { expiresIn: '24h' }
     );
 
@@ -94,7 +114,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // Generate JWT token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
+      jwtSecret,
       { expiresIn: '24h' }
     );
 
