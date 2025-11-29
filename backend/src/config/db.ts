@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -23,5 +24,43 @@ pool.on('error', (err) => {
 });
 
 export const query = (text: string, params?: unknown[]) => pool.query(text, params);
+
+// Initialize database schema and seed admin user
+export const initializeDatabase = async () => {
+  try {
+    // Create users table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'user',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add username column if not exists
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255) UNIQUE
+    `);
+
+    console.log('Database schema initialized');
+
+    // Seed admin user if not exists
+    const adminCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    if (adminCheck.rows.length === 0) {
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash('admin123', salt);
+      await pool.query(
+        'INSERT INTO users (username, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)',
+        ['admin', 'admin@dispotool.local', passwordHash, 'Administrator', 'admin']
+      );
+      console.log('Admin user seeded: username=admin, password=admin123');
+    }
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+};
 
 export default pool;

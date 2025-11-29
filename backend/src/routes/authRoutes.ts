@@ -15,14 +15,23 @@ const jwtSecret = JWT_SECRET || 'dev-secret-key-do-not-use-in-production';
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Username validation regex (alphanumeric and underscores, 3-30 chars)
+const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
+
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body;
+    const { username, email, password, name } = req.body;
 
     // Validate input
-    if (!email || !password || !name) {
-      res.status(400).json({ error: 'Email, password, and name are required' });
+    if (!username || !email || !password || !name) {
+      res.status(400).json({ error: 'Username, email, password, and name are required' });
+      return;
+    }
+
+    // Validate username format
+    if (!USERNAME_REGEX.test(username)) {
+      res.status(400).json({ error: 'Username must be 3-30 characters and contain only letters, numbers, and underscores' });
       return;
     }
 
@@ -38,9 +47,16 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Check if user already exists
-    const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
+    // Check if username already exists
+    const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+    if (existingUsername.rows.length > 0) {
+      res.status(409).json({ error: 'Username is already taken' });
+      return;
+    }
+
+    // Check if email already exists
+    const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existingEmail.rows.length > 0) {
       res.status(409).json({ error: 'User with this email already exists' });
       return;
     }
@@ -51,15 +67,15 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Insert user into database
     const result = await query(
-      'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
-      [email, passwordHash, name, 'user']
+      'INSERT INTO users (username, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, name, role',
+      [username, email, passwordHash, name, 'user']
     );
 
     const user = result.rows[0];
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, username: user.username, email: user.email, role: user.role },
       jwtSecret,
       { expiresIn: '24h' }
     );
@@ -68,6 +84,7 @@ router.post('/register', async (req: Request, res: Response) => {
       message: 'User registered successfully',
       user: {
         id: user.id,
+        username: user.username,
         email: user.email,
         name: user.name,
         role: user.role,
@@ -83,22 +100,22 @@ router.post('/register', async (req: Request, res: Response) => {
 // Login endpoint
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
     // Validate input
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
+    if (!username || !password) {
+      res.status(400).json({ error: 'Username and password are required' });
       return;
     }
 
-    // Find user by email
+    // Find user by username
     const result = await query(
-      'SELECT id, email, password_hash, name, role FROM users WHERE email = $1',
-      [email]
+      'SELECT id, username, email, password_hash, name, role FROM users WHERE username = $1',
+      [username]
     );
 
     if (result.rows.length === 0) {
-      res.status(401).json({ error: 'Invalid email or password' });
+      res.status(401).json({ error: 'Invalid username or password' });
       return;
     }
 
@@ -107,13 +124,13 @@ router.post('/login', async (req: Request, res: Response) => {
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
-      res.status(401).json({ error: 'Invalid email or password' });
+      res.status(401).json({ error: 'Invalid username or password' });
       return;
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, username: user.username, email: user.email, role: user.role },
       jwtSecret,
       { expiresIn: '24h' }
     );
@@ -122,6 +139,7 @@ router.post('/login', async (req: Request, res: Response) => {
       message: 'Login successful',
       user: {
         id: user.id,
+        username: user.username,
         email: user.email,
         name: user.name,
         role: user.role,
