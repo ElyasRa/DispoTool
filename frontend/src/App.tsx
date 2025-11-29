@@ -1,10 +1,48 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useEffect, ReactNode } from 'react';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
-function Dashboard() {
+interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+}
+
+interface ProtectedRouteProps {
+  children: ReactNode;
+  isAuthenticated: boolean;
+}
+
+function ProtectedRoute({ children, isAuthenticated }: ProtectedRouteProps) {
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+interface DashboardProps {
+  user: User | null;
+  onLogout: () => void;
+}
+
+function Dashboard({ user, onLogout }: DashboardProps) {
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-blue-600 text-white p-4 shadow-md">
-        <h1 className="text-2xl font-bold">DispoTool Dashboard</h1>
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold">DispoTool Dashboard</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm">Welcome, {user?.name}</span>
+            <button
+              onClick={onLogout}
+              className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-md text-sm transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
       </header>
       <main className="container mx-auto p-6">
         <div className="bg-white rounded-lg shadow-md p-6">
@@ -21,10 +59,66 @@ function Dashboard() {
 }
 
 function App() {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    // Check for existing token on mount
+    const savedToken = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
+
+  const handleAuth = (newToken: string, newUser: User) => {
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  };
+
+  const isAuthenticated = !!token;
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated}>
+              <Dashboard user={user} onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/" replace />
+            ) : (
+              <Login onLogin={handleAuth} />
+            )
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/" replace />
+            ) : (
+              <Register onRegister={handleAuth} />
+            )
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

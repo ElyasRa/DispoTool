@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+import authRoutes from './routes/authRoutes';
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ app.use(express.json());
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'DispoTool Backend is running' });
 });
+
+// Auth routes
+app.use('/api/auth', authRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {
