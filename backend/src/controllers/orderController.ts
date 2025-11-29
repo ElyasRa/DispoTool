@@ -178,14 +178,21 @@ export const assignOrder = async (req: Request, res: Response): Promise<void> =>
     const updatedOrder: Auftrag = updateResult.rows[0];
 
     // Send Telegram notification if monteur has chat_id
+    let telegramSent = false;
     if (monteur.telegram_chat_id) {
-      await sendOrderAssignment(monteur.telegram_chat_id, updatedOrder);
+      try {
+        await sendOrderAssignment(monteur.telegram_chat_id, updatedOrder);
+        telegramSent = true;
+      } catch (telegramError) {
+        // Log the error but don't fail the assignment
+        console.error('Failed to send Telegram notification:', telegramError);
+      }
     }
 
     res.json({
       message: 'Order assigned successfully',
       order: updatedOrder,
-      telegram_sent: !!monteur.telegram_chat_id,
+      telegram_sent: telegramSent,
     });
   } catch (error) {
     console.error('Error assigning order:', error);

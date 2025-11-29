@@ -36,12 +36,28 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
   const [selectedOrder, setSelectedOrder] = useState<Auftrag | null>(null);
   const [selectedMonteur, setSelectedMonteur] = useState<Monteur | null>(null);
 
-  // Check if API key exists before trying to load
+  // Only load Google Maps if API key is provided
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
-    // Prevent loading if no API key
-    id: apiKey ? 'google-map-script' : 'no-api-key',
+    id: 'google-map-script',
+    // Skip loading if there's no API key by using an invalid but non-empty key
+    // This prevents the hook from making unnecessary network requests
   });
+
+  // Show message if no API key is configured - check this BEFORE Google Maps loading states
+  if (!apiKey) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
+        <div className="text-center text-gray-600 p-4">
+          <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="font-medium mb-1">Google Maps API-Key nicht konfiguriert</p>
+          <p className="text-sm">Bitte setzen Sie VITE_GOOGLE_MAPS_API_KEY in der .env Datei</p>
+        </div>
+      </div>
+    );
+  }
 
   const onLoad = useCallback((map: google.maps.Map) => {
     // Fit bounds to show all markers
@@ -93,21 +109,6 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
       scale: 12,
     };
   }, [isLoaded]);
-
-  // Show message if no API key is configured
-  if (!apiKey) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
-        <div className="text-center text-gray-600 p-4">
-          <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="font-medium mb-1">Google Maps API-Key nicht konfiguriert</p>
-          <p className="text-sm">Bitte setzen Sie VITE_GOOGLE_MAPS_API_KEY in der .env Datei</p>
-        </div>
-      </div>
-    );
-  }
 
   if (loadError) {
     return (
