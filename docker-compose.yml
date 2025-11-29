@@ -5,7 +5,7 @@ services:
     image: postgis/postgis:15-3.3
     container_name: dispotool-postgres
     environment:
-      POSTGRES_DB: dispotool
+      POSTGRES_DB: dispo_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -28,7 +28,7 @@ services:
       PORT: 3000
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: dispotool
+      DB_NAME: dispo_db
       DB_USER: postgres
       DB_PASSWORD: postgres
       # FRONTEND_URL is used for CORS configuration - use localhost for browser access
