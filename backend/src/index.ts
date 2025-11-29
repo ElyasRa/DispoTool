@@ -4,6 +4,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
+import orderRoutes from './routes/orderRoutes';
+import monteurRoutes from './routes/monteurRoutes';
 import { initializeDatabase } from './config/db';
 
 dotenv.config();
@@ -30,6 +32,12 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // Auth routes
 app.use('/api/auth', authRoutes);
+
+// Order routes
+app.use('/api/orders', orderRoutes);
+
+// Monteur routes
+app.use('/api/monteure', monteurRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {
