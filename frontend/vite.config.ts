@@ -6,10 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // host: true is required for the dev server to accept connections from outside the container (Docker networking)
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_API_URL || 'http://localhost:3000',
         changeOrigin: true,
       },
     },

@@ -31,7 +31,8 @@ services:
       DB_NAME: dispotool
       DB_USER: postgres
       DB_PASSWORD: postgres
-      FRONTEND_URL: http://localhost:5173
+      # FRONTEND_URL is used for CORS configuration - use localhost for browser access
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     ports:
       - "3000:3000"
     depends_on:
