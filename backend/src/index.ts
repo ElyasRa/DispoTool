@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
+import { initializeDatabase } from './config/db';
 
 dotenv.config();
 
@@ -39,9 +40,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start server
-httpServer.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Initialize database and start server
+initializeDatabase().then(() => {
+  httpServer.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
 });
 
 export { app, io };

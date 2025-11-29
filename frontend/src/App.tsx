@@ -5,6 +5,7 @@ import Register from './pages/Register';
 
 interface User {
   id: number;
+  username: string;
   email: string;
   name: string;
   role: string;
@@ -70,7 +71,7 @@ function App() {
       try {
         const parsedUser = JSON.parse(savedUser);
         // Validate user object structure
-        if (parsedUser && typeof parsedUser.id === 'number' && typeof parsedUser.email === 'string') {
+        if (parsedUser && typeof parsedUser.id === 'number' && typeof parsedUser.username === 'string') {
           setToken(savedToken);
           setUser(parsedUser);
         } else {
