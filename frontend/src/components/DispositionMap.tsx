@@ -1,4 +1,4 @@
-import { useCallback, useState, memo } from 'react';
+import { useCallback, useState, memo, useMemo } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import { Auftrag, Monteur } from '../types/models';
 
@@ -20,28 +20,30 @@ const defaultCenter = {
   lng: 10.4515,
 };
 
-const mapOptions: google.maps.MapOptions = {
-  disableDefaultUI: false,
-  zoomControl: true,
-  mapTypeControl: false,
-  streetViewControl: false,
-  fullscreenControl: true,
+// Color configurations for order status
+const ORDER_COLORS: Record<string, string> = {
+  Neu: '#EF4444',           // Red
+  Zugewiesen: '#3B82F6',    // Blue
+  Angenommen: '#22C55E',    // Green
+  Erledigt: '#6B7280',      // Gray
+  Storno: '#F97316',        // Orange
+  Abgelehnt: '#F97316',     // Orange
 };
 
 function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: DispositionMapProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-  
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey,
-  });
 
   const [selectedOrder, setSelectedOrder] = useState<Auftrag | null>(null);
   const [selectedMonteur, setSelectedMonteur] = useState<Monteur | null>(null);
-  const [, setMap] = useState<google.maps.Map | null>(null);
+
+  // Check if API key exists before trying to load
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey,
+    // Prevent loading if no API key
+    id: apiKey ? 'google-map-script' : 'no-api-key',
+  });
 
   const onLoad = useCallback((map: google.maps.Map) => {
-    setMap(map);
-    
     // Fit bounds to show all markers
     const bounds = new google.maps.LatLngBounds();
     let hasMarkers = false;
@@ -65,38 +67,47 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
     }
   }, [orders, monteure]);
 
-  const onUnmount = useCallback(() => {
-    setMap(null);
-  }, []);
-
-  const getOrderMarkerIcon = (status: string): google.maps.Symbol => {
-    const colors: Record<string, string> = {
-      Neu: '#EF4444',           // Red
-      Zugewiesen: '#3B82F6',    // Blue
-      Angenommen: '#22C55E',    // Green
-      Erledigt: '#6B7280',      // Gray
-      Storno: '#F97316',        // Orange
-      Abgelehnt: '#F97316',     // Orange
-    };
-
-    return {
+  // Create marker icons only when Google Maps is loaded
+  const getOrderMarkerIcon = useMemo(() => {
+    if (!isLoaded || typeof google === 'undefined') return () => undefined;
+    
+    return (status: string) => ({
       path: google.maps.SymbolPath.CIRCLE,
-      fillColor: colors[status] || '#EF4444',
+      fillColor: ORDER_COLORS[status] || '#EF4444',
       fillOpacity: 1,
       strokeWeight: 2,
       strokeColor: '#FFFFFF',
       scale: 10,
-    };
-  };
+    });
+  }, [isLoaded]);
 
-  const monteurMarkerIcon: google.maps.Symbol = {
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: '#8B5CF6',      // Purple
-    fillOpacity: 1,
-    strokeWeight: 3,
-    strokeColor: '#FFFFFF',
-    scale: 12,
-  };
+  const monteurMarkerIcon = useMemo(() => {
+    if (!isLoaded || typeof google === 'undefined') return undefined;
+    
+    return {
+      path: google.maps.SymbolPath.CIRCLE,
+      fillColor: '#8B5CF6',      // Purple
+      fillOpacity: 1,
+      strokeWeight: 3,
+      strokeColor: '#FFFFFF',
+      scale: 12,
+    };
+  }, [isLoaded]);
+
+  // Show message if no API key is configured
+  if (!apiKey) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
+        <div className="text-center text-gray-600 p-4">
+          <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="font-medium mb-1">Google Maps API-Key nicht konfiguriert</p>
+          <p className="text-sm">Bitte setzen Sie VITE_GOOGLE_MAPS_API_KEY in der .env Datei</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loadError) {
     return (
@@ -126,28 +137,19 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
     );
   }
 
-  if (!apiKey) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
-        <div className="text-center text-gray-600 p-4">
-          <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="font-medium mb-1">Google Maps API-Key nicht konfiguriert</p>
-          <p className="text-sm">Bitte setzen Sie VITE_GOOGLE_MAPS_API_KEY in der .env Datei</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <GoogleMap
       mapContainerStyle={mapContainerStyle}
       center={defaultCenter}
       zoom={6}
-      options={mapOptions}
+      options={{
+        disableDefaultUI: false,
+        zoomControl: true,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
+      }}
       onLoad={onLoad}
-      onUnmount={onUnmount}
     >
       {/* Order Markers */}
       {orders.map((order) => {
