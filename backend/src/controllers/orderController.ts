@@ -246,6 +246,41 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
   }
 };
 
+/**
+ * Unschedule an order (remove assignment and reset to open state)
+ * This is called when a task is dragged from the timeline back to the Open Orders list
+ * or to the cancellation zone, to persist the change in the database.
+ */
+export const unscheduleOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if order exists
+    const orderResult = await query('SELECT * FROM auftraege WHERE id = $1', [id]);
+    if (orderResult.rows.length === 0) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    // Clear the driver assignment and reset status to 'Neu' (open)
+    const updateResult = await query(
+      `UPDATE auftraege 
+       SET status = 'Neu', zugewiesen_an = NULL 
+       WHERE id = $1 
+       RETURNING *`,
+      [id]
+    );
+
+    res.json({
+      message: 'Order unscheduled successfully',
+      order: updateResult.rows[0],
+    });
+  } catch (error) {
+    console.error('Error unscheduling order:', error);
+    res.status(500).json({ error: 'Failed to unschedule order' });
+  }
+};
+
 export default {
   getAllOrders,
   getOrdersByStatus,
@@ -253,4 +288,5 @@ export default {
   createOrder,
   assignOrder,
   updateOrderStatus,
+  unscheduleOrder,
 };

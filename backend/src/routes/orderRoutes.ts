@@ -6,6 +6,7 @@ import {
   createOrder,
   assignOrder,
   updateOrderStatus,
+  unscheduleOrder,
 } from '../controllers/orderController';
 
 const router = Router();
@@ -27,5 +28,8 @@ router.put('/:id/assign', assignOrder);
 
 // PUT /api/orders/:id/status - Update order status
 router.put('/:id/status', updateOrderStatus);
+
+// PUT /api/orders/:id/unschedule - Unschedule an order (remove assignment, reset to open)
+router.put('/:id/unschedule', unscheduleOrder);
 
 export default router;
