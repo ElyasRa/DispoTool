@@ -97,11 +97,14 @@ const mockOpenOrders: OpenOrder[] = [
 ];
 
 // Time slots for the timeline - showing work hours (8:00 - 18:00)
+// We display 11 hour markers but the working duration is 10 hours (8-18)
 const timeSlots = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 // Timeline starts at hour 8
 const TIMELINE_START_HOUR = 8;
-// Timeline spans 10 hours
-const TIMELINE_HOURS = 10;
+// Timeline ends at hour 18
+const TIMELINE_END_HOUR = 18;
+// Timeline spans 10 hours for positioning calculations
+const TIMELINE_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
 // Snap interval in hours (0.5 = 30 minutes)
 const SNAP_INTERVAL = 0.5;
 
@@ -266,7 +269,9 @@ function Disposition() {
 
     // Snap to nearest interval
     const snappedHour = Math.round(dropHour / SNAP_INTERVAL) * SNAP_INTERVAL;
-    const clampedHour = Math.max(TIMELINE_START_HOUR, Math.min(snappedHour, TIMELINE_START_HOUR + TIMELINE_HOURS - 1));
+    // Clamp to valid range: start at TIMELINE_START_HOUR, end at TIMELINE_END_HOUR - task duration
+    // We allow tasks to start at any hour from 8 to 17 (last hour where a 1-hour task fits)
+    const clampedHour = Math.max(TIMELINE_START_HOUR, Math.min(snappedHour, TIMELINE_END_HOUR - 1));
 
     // Create new scheduled task
     const newTask: ScheduledTask = {
@@ -393,8 +398,11 @@ function Disposition() {
 
                 {/* Monteur Rows */}
                 {filteredMonteure.map((monteur) => {
-                  // Check if monteur has any active tasks
+                  // Check if monteur has any scheduled tasks in the current view
                   const hasActiveTasks = scheduledTasks.some((t) => t.resourceId === monteur.id);
+                  // Green background indicates the monteur is available for new assignments:
+                  // - Must be marked as "free" (not on break, not off duty)
+                  // - Must have no tasks scheduled in the current timeline view
                   const rowBgColor = monteur.isFree && !hasActiveTasks ? 'bg-green-50' : 'bg-white';
 
                   return (
