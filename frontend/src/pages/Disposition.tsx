@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Search,
   Filter,
+  X,
 } from 'lucide-react';
 import DispositionMap from '../components/DispositionMap';
 import Sidebar from '../components/Sidebar';
@@ -52,6 +53,9 @@ interface ScheduledTask {
   originalOrderId?: number; // Original OpenOrder.id for restoring when unscheduled
   originalLabel?: string; // Original OpenOrder.label for restoring when unscheduled
 }
+
+// Category type for filtering orders and monteure
+type CategoryFilter = 'all' | 'elektro' | 'sanitär' | 'heizung';
 
 // Open Order for left column - Handwerker domain
 interface OpenOrder {
@@ -131,6 +135,18 @@ const isHourInPast = (taskHour: number, currentHour: number): boolean => {
 // Helper function to format hour display
 const formatHour = (hour: number): string => {
   return `${hour.toString().padStart(2, '0')}:00`;
+};
+
+// Helper function to extract order ID from drag event active ID
+const extractOrderId = (activeId: string): number | null => {
+  if (!activeId.startsWith('order-')) return null;
+  return parseInt(activeId.replace('order-', ''), 10);
+};
+
+// Helper function to extract task ID from drag event active ID
+const extractTaskId = (activeId: string): number | null => {
+  if (!activeId.startsWith('task-')) return null;
+  return parseInt(activeId.replace('task-', ''), 10);
 };
 
 // Draggable Order Card Component
@@ -264,6 +280,37 @@ function DroppableOpenOrdersSidebar({ children }: { children: React.ReactNode })
   );
 }
 
+/**
+ * Droppable Cancel Order Dropzone Component.
+ * 
+ * A drop target for cancelling orders. Users can drag either open orders
+ * from the sidebar or scheduled tasks from the timeline onto this zone
+ * to remove them from the dispatch view.
+ * 
+ * Visual feedback: The zone displays a red background when an item is
+ * dragged over it, indicating it's ready to accept the drop.
+ */
+function DroppableCancelOrderZone() {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'cancel-order-zone',
+    data: { type: 'cancel-order' },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mx-2 mb-2 p-3 border-2 border-dashed rounded-lg text-center transition-colors ${
+        isOver
+          ? 'border-red-500 bg-red-100 text-red-700'
+          : 'border-gray-400 bg-gray-100 text-gray-600 hover:border-gray-500'
+      }`}
+    >
+      <X size={18} className={`mx-auto mb-1 ${isOver ? 'text-red-600' : 'text-gray-500'}`} />
+      <span className="text-xs font-medium">Auftrag stornieren</span>
+    </div>
+  );
+}
+
 function Disposition() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -276,11 +323,40 @@ function Disposition() {
   const [activeOrder, setActiveOrder] = useState<OpenOrder | null>(null);
   const [activeTask, setActiveTask] = useState<ScheduledTask | null>(null);
   
+  // State for search and filter functionality
+  const [searchText, setSearchText] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  
   // Current hour state for dynamic timeline
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
   
   // Generate dynamic time slots based on current hour
   const timeSlots = useMemo(() => generateTimeSlots(currentHour), [currentHour]);
+  
+  // Filter open orders by search text and category
+  const filteredOpenOrders = useMemo(() => {
+    let filtered = openOrders;
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter((order) => order.category === categoryFilter);
+    }
+    
+    // Apply search text filter
+    const trimmedSearch = searchText.trim().toLowerCase();
+    if (trimmedSearch) {
+      filtered = filtered.filter(
+        (order) =>
+          order.title.toLowerCase().includes(trimmedSearch) ||
+          order.address.toLowerCase().includes(trimmedSearch) ||
+          order.orderNumber.toLowerCase().includes(trimmedSearch)
+      );
+    }
+    
+    return filtered;
+  }, [openOrders, searchText, categoryFilter]);
   
   // Update current hour every minute to keep timeline fresh
   useEffect(() => {
@@ -422,7 +498,8 @@ function Disposition() {
       const dropHour = parseInt(parts[2], 10);
 
       // Get the dragged task
-      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const taskId = extractTaskId(activeId);
+      if (taskId === null) return;
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
@@ -440,7 +517,8 @@ function Disposition() {
     // Scenario 3: ScheduledTask -> Open Orders (unschedule)
     if (activeId.startsWith('task-') && overId === 'open-orders-sidebar') {
       // Get the dragged task
-      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const taskId = extractTaskId(activeId);
+      if (taskId === null) return;
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
@@ -466,6 +544,26 @@ function Disposition() {
       setOpenOrders((prev) => [...prev, newOrder]);
       return;
     }
+    
+    // Scenario 4: OpenOrder -> Cancel Zone (cancel order from sidebar)
+    if (activeId.startsWith('order-') && overId === 'cancel-order-zone') {
+      const orderId = extractOrderId(activeId);
+      if (orderId === null) return;
+      
+      // Remove from open orders (effectively cancelling it)
+      setOpenOrders((prev) => prev.filter((o) => o.id !== orderId));
+      return;
+    }
+    
+    // Scenario 5: ScheduledTask -> Cancel Zone (cancel scheduled task)
+    if (activeId.startsWith('task-') && overId === 'cancel-order-zone') {
+      const taskId = extractTaskId(activeId);
+      if (taskId === null) return;
+      
+      // Remove from scheduled tasks (effectively cancelling it)
+      setScheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
+      return;
+    }
   };
 
   return (
@@ -489,25 +587,97 @@ function Disposition() {
                     <ChevronDown size={16} />
                   </button>
                   <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {openOrders.length}
+                    {filteredOpenOrders.length}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">
+                  <button 
+                    onClick={() => {
+                      setIsFilterOpen(!isFilterOpen);
+                      setIsSearchOpen(false);
+                    }}
+                    className={`p-1.5 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors ${
+                      isFilterOpen || categoryFilter !== 'all' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'
+                    }`}
+                    aria-label="Filter"
+                  >
                     <Filter size={16} />
                   </button>
-                  <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">
+                  <button 
+                    onClick={() => {
+                      setIsSearchOpen(!isSearchOpen);
+                      setIsFilterOpen(false);
+                    }}
+                    className={`p-1.5 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors ${
+                      isSearchOpen || searchText ? 'text-blue-600 bg-blue-50' : 'text-gray-500'
+                    }`}
+                    aria-label="Suche"
+                  >
                     <Search size={16} />
                   </button>
                 </div>
               </div>
+              
+              {/* Search Input - Toggle visibility */}
+              {isSearchOpen && (
+                <div className="px-2 py-2 bg-gray-50 border-b border-gray-200">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      placeholder="Suche nach Titel, Adresse..."
+                      className="w-full pl-7 pr-7 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      autoFocus
+                    />
+                    {searchText && (
+                      <button
+                        onClick={() => setSearchText('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Filter Dropdown - Toggle visibility */}
+              {isFilterOpen && (
+                <div className="px-2 py-2 bg-gray-50 border-b border-gray-200">
+                  <label className="text-xs text-gray-600 mb-1 block">Kategorie filtern:</label>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
+                    className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="all">Alle Kategorien</option>
+                    <option value="elektro">Elektro</option>
+                    <option value="sanitär">Sanitär</option>
+                    <option value="heizung">Heizung</option>
+                  </select>
+                </div>
+              )}
 
               {/* Orders List - Droppable for unscheduling tasks */}
               <DroppableOpenOrdersSidebar>
-                {openOrders.map((order) => (
+                {filteredOpenOrders.map((order) => (
                   <DraggableOrderCard key={order.id} order={order} />
                 ))}
+                {filteredOpenOrders.length === 0 && (
+                  <p 
+                    className="text-center text-gray-400 text-xs py-4"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Keine Aufträge gefunden
+                  </p>
+                )}
               </DroppableOpenOrdersSidebar>
+              
+              {/* Cancel Order Dropzone */}
+              <DroppableCancelOrderZone />
             </div>
 
             {/* ========== CENTER COLUMN - Gantt Chart / Plantafel (45%) ========== */}
