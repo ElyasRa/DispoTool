@@ -155,7 +155,7 @@ function Disposition() {
                         : 'text-gray-300 hover:text-white'
                     }`}
                   >
-                    Hours
+                    Stunden
                   </button>
                   <button
                     onClick={() => setViewMode('days')}
@@ -165,7 +165,7 @@ function Disposition() {
                         : 'text-gray-300 hover:text-white'
                     }`}
                   >
-                    Days
+                    Tage
                   </button>
                 </div>
 
@@ -175,9 +175,9 @@ function Disposition() {
                   onChange={(e) => setGroupBy(e.target.value as 'all' | 'elektro' | 'sanitär')}
                   className="px-3 py-1.5 text-sm bg-gray-600 text-white border border-gray-500 rounded cursor-pointer hover:bg-gray-500 transition-colors"
                 >
-                  <option value="all">Group: Alle</option>
-                  <option value="elektro">Group: Elektro</option>
-                  <option value="sanitär">Group: Sanitär</option>
+                  <option value="all">Gruppe: Alle</option>
+                  <option value="elektro">Gruppe: Elektro</option>
+                  <option value="sanitär">Gruppe: Sanitär</option>
                 </select>
               </div>
             </div>
