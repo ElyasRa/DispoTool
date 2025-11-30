@@ -351,6 +351,31 @@ function Disposition() {
   // Current hour state for dynamic timeline
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
   
+  // State for tracking order status per monteur (for live status display)
+  // Key: monteur.id, Value: current order status
+  const [monteurOrderStatus, setMonteurOrderStatus] = useState<Record<string, OrderStatus>>(() => {
+    // Initialize from mock data
+    const initialStatus: Record<string, OrderStatus> = {};
+    mockMonteure.forEach((m) => {
+      initialStatus[m.id] = m.currentOrderStatus ?? null;
+    });
+    return initialStatus;
+  });
+  
+  // State for tracking which "erledigt" statuses should still be visible
+  // Key: monteur.id, Value: timestamp when status was set to erledigt
+  const [erledigtVisibleUntil, setErledigtVisibleUntil] = useState<Record<string, number>>(() => {
+    // Initialize 5-second timers for any monteur with initial "erledigt" status from mock data
+    const initialTimers: Record<string, number> = {};
+    const now = Date.now();
+    mockMonteure.forEach((m) => {
+      if (m.currentOrderStatus === 'erledigt') {
+        initialTimers[m.id] = now + 5000;
+      }
+    });
+    return initialTimers;
+  });
+  
   // Generate dynamic time slots based on current hour
   const timeSlots = useMemo(() => generateTimeSlots(currentHour), [currentHour]);
   
@@ -388,6 +413,53 @@ function Disposition() {
     
     return () => clearInterval(interval);
   }, [currentHour]);
+
+  // Auto-hide "erledigt" status after 5 seconds
+  useEffect(() => {
+    const now = Date.now();
+    const timersToSet: { monteurId: string; delay: number }[] = [];
+
+    Object.entries(erledigtVisibleUntil).forEach(([monteurId, visibleUntil]) => {
+      const remaining = visibleUntil - now;
+      if (remaining > 0) {
+        timersToSet.push({ monteurId, delay: remaining });
+      } else {
+        // Already expired, hide immediately
+        setMonteurOrderStatus((prev) => {
+          if (prev[monteurId] === 'erledigt') {
+            return { ...prev, [monteurId]: null };
+          }
+          return prev;
+        });
+        setErledigtVisibleUntil((prev) => {
+          const updated = { ...prev };
+          delete updated[monteurId];
+          return updated;
+        });
+      }
+    });
+
+    // Set up timers for remaining visible statuses
+    const timeoutIds = timersToSet.map(({ monteurId, delay }) => {
+      return setTimeout(() => {
+        setMonteurOrderStatus((prev) => {
+          if (prev[monteurId] === 'erledigt') {
+            return { ...prev, [monteurId]: null };
+          }
+          return prev;
+        });
+        setErledigtVisibleUntil((prev) => {
+          const updated = { ...prev };
+          delete updated[monteurId];
+          return updated;
+        });
+      }, delay);
+    });
+
+    return () => {
+      timeoutIds.forEach((id) => clearTimeout(id));
+    };
+  }, [erledigtVisibleUntil]);
 
   // Empty arrays for map - map shows placeholder when no API key is configured
   const mockOrdersForMap: Auftrag[] = [];
@@ -436,6 +508,27 @@ function Disposition() {
     groupBy === 'all'
       ? mockMonteure
       : mockMonteure.filter((m) => m.specialty === groupBy || m.specialty === 'all');
+
+  // Helper function to update a monteur's order status
+  // For 'erledigt' status, sets up a 5-second visibility window
+  const updateMonteurStatus = (monteurId: string, status: OrderStatus) => {
+    setMonteurOrderStatus((prev) => ({ ...prev, [monteurId]: status }));
+    
+    if (status === 'erledigt') {
+      // Set visibility until 5 seconds from now
+      setErledigtVisibleUntil((prev) => ({
+        ...prev,
+        [monteurId]: Date.now() + 5000,
+      }));
+    } else {
+      // Clear any pending erledigt timer for this monteur
+      setErledigtVisibleUntil((prev) => {
+        const updated = { ...prev };
+        delete updated[monteurId];
+        return updated;
+      });
+    }
+  };
 
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
@@ -506,6 +599,9 @@ function Disposition() {
 
       // Remove from open orders
       setOpenOrders((prev) => prev.filter((o) => o.id !== order.id));
+      
+      // Update monteur status to "zugewiesen" (assigned/blue) - permanently visible
+      updateMonteurStatus(monteurId, 'zugewiesen');
       return;
     }
     
@@ -522,6 +618,8 @@ function Disposition() {
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
+      const previousMonteurId = task.resourceId;
+
       // Update the task with new resource and time
       setScheduledTasks((prev) =>
         prev.map((t) =>
@@ -530,6 +628,19 @@ function Disposition() {
             : t
         )
       );
+      
+      // If reassigning to a different monteur, update statuses
+      if (previousMonteurId !== monteurId) {
+        // Clear status of previous monteur (if they have no other tasks)
+        const previousMonteurTasks = scheduledTasks.filter(
+          (t) => t.resourceId === previousMonteurId && t.id !== taskId
+        );
+        if (previousMonteurTasks.length === 0) {
+          updateMonteurStatus(previousMonteurId, null);
+        }
+        // Set new monteur to "zugewiesen"
+        updateMonteurStatus(monteurId, 'zugewiesen');
+      }
       return;
     }
     
@@ -801,7 +912,8 @@ function Disposition() {
 
                           {/* Live Status Badge - Order status */}
                           {(() => {
-                            const statusDisplay = getOrderStatusDisplay(monteur.currentOrderStatus ?? null);
+                            const currentStatus = monteurOrderStatus[monteur.id] ?? null;
+                            const statusDisplay = getOrderStatusDisplay(currentStatus);
                             return statusDisplay ? (
                               <div className="mb-2">
                                 <span
