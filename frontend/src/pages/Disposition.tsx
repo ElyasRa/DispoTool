@@ -64,7 +64,7 @@ const initialScheduledTasks: ScheduledTask[] = [
   { id: 105, resourceId: 'R04', title: 'Wasserschaden', address: 'Parkstr. 8', startHour: 23, duration: 2, isEmergency: true, category: 'sanitär' },
   { id: 106, resourceId: 'R05', title: 'Wartung', address: 'Ringstr. 45', startHour: 19, duration: 2, isEmergency: false, category: 'elektro' },
   { id: 107, resourceId: 'R04', title: 'Heizungsausfall', address: 'Schulweg 3', startHour: 19, duration: 3, isEmergency: true, category: 'sanitär' },
-  { id: 108, resourceId: 'R06', title: 'Licht Installation', address: 'Marktplatz 7', startHour: 24, duration: 2, isEmergency: false, category: 'elektro' },
+  { id: 108, resourceId: 'R06', title: 'Licht Installation', address: 'Marktplatz 7', startHour: 20, duration: 2, isEmergency: false, category: 'elektro' },
 ];
 
 // Mock data for open orders (left column)
@@ -84,12 +84,19 @@ const mockOpenOrders: OpenOrder[] = [
   { id: 13, orderNumber: '135', title: 'Schalter defekt', address: 'Kirchplatz 5, 10117 Berlin', scheduledTime: '01.12.2025 16:00', isFlexible: true, category: 'elektro' },
 ];
 
-// Time slots for the timeline - showing hours from 19 to 26 (next day 02:00)
-const timeSlots = [19, 20, 21, 22, 23, 24, 25, 26];
+// Time slots for the timeline - showing evening hours (19:00 - 02:00 next day)
+// Values > 24 represent next-day hours for display purposes only
+// The formatHour helper function handles the 24-hour rollover for display
+const timeSlots = [19, 20, 21, 22, 23, 0, 1, 2];
 // Timeline starts at hour 19
 const TIMELINE_START_HOUR = 19;
-// Timeline spans 8 hours
+// Timeline spans 8 hours (crossing midnight)
 const TIMELINE_HOURS = 8;
+
+// Helper function to format hour display
+const formatHour = (hour: number): string => {
+  return hour.toString().padStart(2, '0');
+};
 
 function Disposition() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -315,12 +322,12 @@ function Disposition() {
                 </div>
                 {/* Timeline Hours */}
                 <div className="flex-1 flex">
-                  {timeSlots.map((hour) => (
+                  {timeSlots.map((hour, index) => (
                     <div
-                      key={hour}
+                      key={index}
                       className="flex-1 min-w-[50px] border-r border-gray-300 py-2 text-center text-xs font-medium text-gray-600"
                     >
-                      {hour > 24 ? hour - 24 : hour}
+                      {formatHour(hour)}
                     </div>
                   ))}
                 </div>
@@ -371,9 +378,9 @@ function Disposition() {
                   {/* Timeline Area with Task Bars */}
                   <div className="flex-1 flex relative" style={{ minHeight: '110px' }}>
                     {/* Grid Lines */}
-                    {timeSlots.map((hour) => (
+                    {timeSlots.map((_, index) => (
                       <div
-                        key={hour}
+                        key={index}
                         className="flex-1 min-w-[50px] border-r border-gray-100"
                       />
                     ))}
