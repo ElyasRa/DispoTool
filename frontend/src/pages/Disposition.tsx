@@ -154,15 +154,15 @@ function DraggableOrderCard({ order }: { order: OpenOrder }) {
       style={style}
       {...listeners}
       {...attributes}
-      className={`bg-white rounded shadow-md p-3 cursor-grab active:cursor-grabbing border-l-4 border-black hover:shadow-lg transition-shadow ${
+      className={`bg-white rounded shadow-md p-2 mb-1 cursor-grab active:cursor-grabbing border-l-4 border-black hover:shadow-lg transition-shadow ${
         isDragging ? 'ring-2 ring-blue-500' : ''
       }`}
     >
       {/* Title */}
-      <div className="font-bold text-sm text-gray-900 mb-1">{order.title}</div>
+      <div className="font-bold text-xs text-gray-900 mb-0.5">{order.title}</div>
       {/* Address */}
-      <div className="flex items-start gap-1 mb-2">
-        <MapPin size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+      <div className="flex items-start gap-1 mb-1">
+        <MapPin size={10} className="text-gray-400 mt-0.5 flex-shrink-0" />
         <span className="text-xs text-gray-500 leading-tight">{order.address}</span>
       </div>
       {/* Label */}
@@ -255,7 +255,7 @@ function DroppableOpenOrdersSidebar({ children }: { children: React.ReactNode })
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 overflow-y-auto p-3 space-y-2 transition-colors ${
+      className={`flex-1 overflow-y-auto p-2 space-y-1 transition-colors ${
         isOver ? 'bg-blue-100' : 'bg-gray-50'
       }`}
     >
@@ -479,8 +479,8 @@ function Disposition() {
         >
           {/* Main 3-Column Split-View Layout */}
           <div className="flex-1 flex overflow-hidden">
-            {/* ========== LEFT COLUMN - Offene Aufträge (20%) ========== */}
-            <div className="w-[20%] min-w-[260px] border-r border-gray-300 bg-white flex flex-col">
+            {/* ========== LEFT COLUMN - Offene Aufträge (compact) ========== */}
+            <div className="w-[220px] min-w-[220px] border-r border-gray-300 bg-white flex flex-col">
               {/* Header with Counter and Dropdown */}
               <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -718,10 +718,10 @@ function Disposition() {
         {/* Drag Overlay */}
         <DragOverlay>
           {activeOrder ? (
-            <div className="bg-white rounded shadow-lg p-3 border-l-4 border-black opacity-90 w-56">
-              <div className="font-bold text-sm text-gray-900 mb-1">{activeOrder.title}</div>
-              <div className="flex items-start gap-1 mb-2">
-                <MapPin size={12} className="text-gray-400 mt-0.5 flex-shrink-0" />
+            <div className="bg-white rounded shadow-lg p-2 border-l-4 border-black opacity-90 w-48">
+              <div className="font-bold text-xs text-gray-900 mb-0.5">{activeOrder.title}</div>
+              <div className="flex items-start gap-1 mb-1">
+                <MapPin size={10} className="text-gray-400 mt-0.5 flex-shrink-0" />
                 <span className="text-xs text-gray-500 leading-tight">{activeOrder.address}</span>
               </div>
               <span className="inline-block bg-yellow-400 text-yellow-900 text-xs font-medium px-2 py-0.5 rounded">
