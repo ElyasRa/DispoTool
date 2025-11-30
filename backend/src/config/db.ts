@@ -52,25 +52,38 @@ export const initializeDatabase = async () => {
           ALTER TABLE users ADD COLUMN vorname VARCHAR(255) DEFAULT '';
         END IF;
         
-        -- Add benutzername column if not exists (migrate from username)
+        -- Add benutzername column if not exists (migrate from username or email if they exist)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'benutzername') THEN
           ALTER TABLE users ADD COLUMN benutzername VARCHAR(255);
-          UPDATE users SET benutzername = COALESCE(username, email) WHERE benutzername IS NULL;
+          -- Try to migrate from username column if it exists
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'username') THEN
+            UPDATE users SET benutzername = username WHERE benutzername IS NULL;
+          END IF;
+          -- Try to migrate from email column if benutzername is still null and email exists
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'email') THEN
+            UPDATE users SET benutzername = email WHERE benutzername IS NULL;
+          END IF;
           ALTER TABLE users ALTER COLUMN benutzername SET NOT NULL;
           ALTER TABLE users ADD CONSTRAINT users_benutzername_unique UNIQUE (benutzername);
         END IF;
         
-        -- Add passwort column if not exists (migrate from password_hash)
+        -- Add passwort column if not exists (migrate from passwort_hash if it exists)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'passwort') THEN
           ALTER TABLE users ADD COLUMN passwort VARCHAR(255);
-          UPDATE users SET passwort = password_hash WHERE passwort IS NULL;
+          -- Try to migrate from passwort_hash if it exists
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'passwort_hash') THEN
+            UPDATE users SET passwort = passwort_hash WHERE passwort IS NULL;
+          END IF;
           ALTER TABLE users ALTER COLUMN passwort SET NOT NULL;
         END IF;
         
         -- Rename role to rolle if rolle doesn't exist
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'rolle') THEN
           ALTER TABLE users ADD COLUMN rolle VARCHAR(50) DEFAULT 'disponent';
-          UPDATE users SET rolle = COALESCE(role, 'disponent') WHERE rolle IS NULL OR rolle = 'disponent';
+          -- Try to migrate from role column if it exists
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
+            UPDATE users SET rolle = COALESCE(role, 'disponent') WHERE rolle IS NULL OR rolle = 'disponent';
+          END IF;
         END IF;
         
         -- Add status column if not exists
