@@ -1,6 +1,6 @@
 import { Auftrag, Monteur, AssignOrderResponse } from '../types/models';
 
-const API_BASE = '/api';
+const API_BASE = 'http://49.13.128.160:3000/api';
 
 /**
  * Helper function for API requests
