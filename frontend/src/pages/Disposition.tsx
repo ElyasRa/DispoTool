@@ -29,6 +29,20 @@ import { Auftrag, Monteur } from '../types/models';
 // Order status for live tracking display
 type OrderStatus = 'zugewiesen' | 'angenommen' | 'erledigt' | null;
 
+// Helper function to get order status display properties
+const getOrderStatusDisplay = (status: OrderStatus): { className: string; text: string } | null => {
+  switch (status) {
+    case 'zugewiesen':
+      return { className: 'bg-blue-500', text: '(P) Fahrer beauftragt' };
+    case 'angenommen':
+      return { className: 'bg-red-500', text: 'Auftrag angenommen' };
+    case 'erledigt':
+      return { className: 'bg-green-500', text: 'Auftrag erledigt' };
+    default:
+      return null;
+  }
+};
+
 // Type definitions for Handwerker domain - Monteur represents a Technician
 interface MonteurResource {
   id: string;
@@ -786,25 +800,18 @@ function Disposition() {
                           </div>
 
                           {/* Live Status Badge - Order status */}
-                          {monteur.currentOrderStatus && (
-                            <div className="mb-2">
-                              <span
-                                className={`inline-block text-white text-[10px] px-2 py-0.5 rounded font-medium ${
-                                  monteur.currentOrderStatus === 'zugewiesen'
-                                    ? 'bg-blue-500'
-                                    : monteur.currentOrderStatus === 'angenommen'
-                                    ? 'bg-red-500'
-                                    : 'bg-green-500'
-                                }`}
-                              >
-                                {monteur.currentOrderStatus === 'zugewiesen'
-                                  ? '(P) Fahrer beauftragt'
-                                  : monteur.currentOrderStatus === 'angenommen'
-                                  ? 'Auftrag angenommen'
-                                  : 'Auftrag erledigt'}
-                              </span>
-                            </div>
-                          )}
+                          {(() => {
+                            const statusDisplay = getOrderStatusDisplay(monteur.currentOrderStatus ?? null);
+                            return statusDisplay ? (
+                              <div className="mb-2">
+                                <span
+                                  className={`inline-block text-white text-[10px] px-2 py-0.5 rounded font-medium ${statusDisplay.className}`}
+                                >
+                                  {statusDisplay.text}
+                                </span>
+                              </div>
+                            ) : null;
+                          })()}
 
                           {/* Fahrzeit anzeigen Button */}
                           <div className="mb-2">
