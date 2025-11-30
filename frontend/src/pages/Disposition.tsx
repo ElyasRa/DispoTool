@@ -29,6 +29,9 @@ import { Auftrag, Monteur } from '../types/models';
 // Order status for live tracking display
 type OrderStatus = 'zugewiesen' | 'angenommen' | 'erledigt' | null;
 
+// Task status type (non-null subset of OrderStatus)
+type TaskStatus = Exclude<OrderStatus, null>;
+
 // Helper function to get order status display properties
 const getOrderStatusDisplay = (status: OrderStatus): { className: string; text: string } => {
   switch (status) {
@@ -45,7 +48,7 @@ const getOrderStatusDisplay = (status: OrderStatus): { className: string; text: 
 };
 
 // Helper function to get task border color based on status
-const getTaskBorderColor = (status: 'zugewiesen' | 'angenommen' | 'erledigt'): string => {
+const getTaskBorderColor = (status: TaskStatus): string => {
   switch (status) {
     case 'zugewiesen':
       return 'border-blue-600'; // Blue for Beauftragt (Assigned)
@@ -81,7 +84,7 @@ interface ScheduledTask {
   duration: number; // Duration in hours
   isEmergency: boolean; // Red for emergencies, blue for standard
   category: 'elektro' | 'sanitär' | 'heizung';
-  status: 'zugewiesen' | 'angenommen' | 'erledigt'; // Task status for border color
+  status: TaskStatus; // Task status for border color
   // Fields for tracking original order data when scheduling from open orders.
   // These are populated when an OpenOrder is dropped onto the timeline and used
   // to restore the order when unscheduling (dragging back to Open Orders).
