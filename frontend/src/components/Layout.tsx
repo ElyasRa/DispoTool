@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { LogOut } from 'lucide-react';
 import Sidebar from './Sidebar';
 
@@ -17,12 +17,18 @@ interface LayoutProps {
 }
 
 function Layout({ children, user, onLogout }: LayoutProps) {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => !prev);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
-      <Sidebar />
+      <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} />
       
       {/* Main Content */}
-      <div className="ml-64">
+      <div className={`${isSidebarCollapsed ? 'ml-16' : 'ml-64'} transition-all duration-300 ease-in-out`}>
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
           <div className="flex justify-between items-center px-6 py-4">
