@@ -98,8 +98,6 @@ const mockOpenOrders: OpenOrder[] = [
 
 // Number of hours to display in the timeline (current hour + N hours ahead)
 const TIMELINE_HOURS_COUNT = 5; // Shows current hour + 4 hours ahead
-// Snap interval in hours (0.5 = 30 minutes)
-const SNAP_INTERVAL = 0.5;
 // Minimum row height
 const MIN_ROW_HEIGHT = 100;
 
@@ -111,6 +109,18 @@ const generateTimeSlots = (startHour: number): number[] => {
     slots.push((startHour + i) % 24);
   }
   return slots;
+};
+
+// Helper function to check if a task hour is in the past relative to current hour
+// Handles midnight wraparound correctly
+const isHourInPast = (taskHour: number, currentHour: number): boolean => {
+  // Calculate how many hours ago the task was scheduled
+  // Using modular arithmetic to handle 24-hour wraparound
+  const hoursDiff = (currentHour - taskHour + 24) % 24;
+  // If hoursDiff is between 1-12, the task is in the past (within last 12 hours)
+  // If hoursDiff is 0, the task is exactly at current hour (not past)
+  // If hoursDiff is 13-23, the task is actually in the future (11-1 hours ahead)
+  return hoursDiff > 0 && hoursDiff <= 12;
 };
 
 // Helper function to format hour display
@@ -290,11 +300,9 @@ function Disposition() {
     const order = openOrders.find((o) => `order-${o.id}` === active.id);
     if (!order) return;
 
-    // The dropped hour is already within the visible timeline slots
-    // Just use the dropHour directly since it's from a valid droppable slot
-    const snappedHour = Math.round(dropHour / SNAP_INTERVAL) * SNAP_INTERVAL;
-    // Ensure it stays within the visible time slots
-    const clampedHour = timeSlots.includes(snappedHour) ? snappedHour : dropHour;
+    // The dropHour comes directly from a valid droppable time slot
+    // No need to snap or clamp since the slot ID already contains a valid hour
+    const startHour = dropHour;
 
     // Create new scheduled task
     const newTask: ScheduledTask = {
@@ -302,7 +310,7 @@ function Disposition() {
       resourceId: monteurId,
       title: order.title,
       address: order.address,
-      startHour: clampedHour,
+      startHour: startHour,
       duration: 2, // Default duration
       isEmergency: order.label === 'Notfall' || order.label === 'Dringend',
       category: order.category,
@@ -481,24 +489,20 @@ function Disposition() {
                         {timeSlots.map((hour, hourIndex) => {
                           // Auto-shift logic (Snowplow Effect):
                           // Tasks scheduled in the past are displayed at the current hour (first slot)
-                          // A task is "in the past" if its startHour is before currentHour
                           const tasksForThisCell = monteurTasks.filter((task) => {
-                            // For the first slot (current hour), collect all past tasks
+                            const taskIsInPast = isHourInPast(task.startHour, currentHour);
+                            
+                            // For the first slot (current hour), collect:
+                            // - Tasks scheduled for the current hour
+                            // - All past tasks (shifted to current hour via snowplow effect)
                             if (hourIndex === 0) {
-                              // Check if task is in the past (considering midnight wraparound)
-                              // A task is in the past if:
-                              // - task.startHour < currentHour (simple case, e.g., task at 8, current is 10)
-                              // OR
-                              // - task.startHour > 12 && currentHour < 12 (midnight wraparound, e.g., task at 22, current is 2)
-                              const isTaskInPast = 
-                                (task.startHour < currentHour && !(task.startHour > 12 && currentHour < 12)) ||
-                                (task.startHour > 12 && currentHour < 12 && task.startHour > currentHour);
-                              
-                              return task.startHour === hour || isTaskInPast;
+                              return task.startHour === hour || taskIsInPast;
                             }
-                            // For other slots, only show tasks that are actually scheduled for that hour
-                            // and are not in the past (they would have been shifted to the first slot)
-                            return task.startHour === hour && task.startHour >= currentHour;
+                            
+                            // For other slots, only show tasks that are:
+                            // - Scheduled for exactly this hour
+                            // - Not in the past (those are shifted to the first slot)
+                            return task.startHour === hour && !taskIsInPast;
                           });
 
                           return (
