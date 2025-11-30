@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -96,17 +96,32 @@ const mockOpenOrders: OpenOrder[] = [
   { id: 10, orderNumber: 'A-2024-010', title: 'Fußbodenheizung', address: 'Waldweg 2, 10117 Berlin', label: 'Termin heute', category: 'heizung' },
 ];
 
-// Time slots for the timeline - showing work hours (8:00 - 18:00)
-// We display 11 hour markers but the working duration is 10 hours (8-18)
-const timeSlots = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-// Timeline starts at hour 8
-const TIMELINE_START_HOUR = 8;
-// Timeline ends at hour 18
-const TIMELINE_END_HOUR = 18;
-// Snap interval in hours (0.5 = 30 minutes)
-const SNAP_INTERVAL = 0.5;
+// Number of hours to display in the timeline (current hour + N hours ahead)
+const TIMELINE_HOURS_COUNT = 5; // Shows current hour + 4 hours ahead
 // Minimum row height
 const MIN_ROW_HEIGHT = 100;
+
+// Helper function to generate dynamic time slots starting from current hour
+const generateTimeSlots = (startHour: number): number[] => {
+  const slots: number[] = [];
+  for (let i = 0; i < TIMELINE_HOURS_COUNT; i++) {
+    // Handle midnight wraparound (e.g., 23 -> 0 -> 1)
+    slots.push((startHour + i) % 24);
+  }
+  return slots;
+};
+
+// Helper function to check if a task hour is in the past relative to current hour
+// Handles midnight wraparound correctly
+const isHourInPast = (taskHour: number, currentHour: number): boolean => {
+  // Calculate how many hours ago the task was scheduled
+  // Using modular arithmetic to handle 24-hour wraparound
+  const hoursDiff = (currentHour - taskHour + 24) % 24;
+  // If hoursDiff is between 1-12, the task is in the past (within last 12 hours)
+  // If hoursDiff is 0, the task is exactly at current hour (not past)
+  // If hoursDiff is 13-23, the task is actually in the future (11-1 hours ahead)
+  return hoursDiff > 0 && hoursDiff <= 12;
+};
 
 // Helper function to format hour display
 const formatHour = (hour: number): string => {
@@ -190,6 +205,24 @@ function Disposition() {
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>(initialScheduledTasks);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>(mockOpenOrders);
   const [activeOrder, setActiveOrder] = useState<OpenOrder | null>(null);
+  
+  // Current hour state for dynamic timeline
+  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  
+  // Generate dynamic time slots based on current hour
+  const timeSlots = useMemo(() => generateTimeSlots(currentHour), [currentHour]);
+  
+  // Update current hour every minute to keep timeline fresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newHour = new Date().getHours();
+      if (newHour !== currentHour) {
+        setCurrentHour(newHour);
+      }
+    }, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [currentHour]);
 
   // Empty arrays for map - map shows placeholder when no API key is configured
   const mockOrdersForMap: Auftrag[] = [];
@@ -267,11 +300,9 @@ function Disposition() {
     const order = openOrders.find((o) => `order-${o.id}` === active.id);
     if (!order) return;
 
-    // Snap to nearest interval
-    const snappedHour = Math.round(dropHour / SNAP_INTERVAL) * SNAP_INTERVAL;
-    // Clamp to valid range: start at TIMELINE_START_HOUR, end at TIMELINE_END_HOUR - task duration
-    // We allow tasks to start at any hour from 8 to 17 (last hour where a 1-hour task fits)
-    const clampedHour = Math.max(TIMELINE_START_HOUR, Math.min(snappedHour, TIMELINE_END_HOUR - 1));
+    // The dropHour comes directly from a valid droppable time slot
+    // No need to snap or clamp since the slot ID already contains a valid hour
+    const startHour = dropHour;
 
     // Create new scheduled task
     const newTask: ScheduledTask = {
@@ -279,7 +310,7 @@ function Disposition() {
       resourceId: monteurId,
       title: order.title,
       address: order.address,
-      startHour: clampedHour,
+      startHour: startHour,
       duration: 2, // Default duration
       isEmergency: order.label === 'Notfall' || order.label === 'Dringend',
       category: order.category,
@@ -455,11 +486,24 @@ function Disposition() {
                       {/* Timeline Area with Droppable Slots containing Tasks */}
                       <div className="flex-1 flex">
                         {/* Droppable Time Slots with Tasks Rendered Inside */}
-                        {timeSlots.map((hour) => {
-                          // Filter tasks that start at this specific hour for this monteur
-                          const tasksForThisCell = monteurTasks.filter(
-                            (task) => task.startHour === hour
-                          );
+                        {timeSlots.map((hour, hourIndex) => {
+                          // Auto-shift logic (Snowplow Effect):
+                          // Tasks scheduled in the past are displayed at the current hour (first slot)
+                          const tasksForThisCell = monteurTasks.filter((task) => {
+                            const taskIsInPast = isHourInPast(task.startHour, currentHour);
+                            
+                            // For the first slot (current hour), collect:
+                            // - Tasks scheduled for the current hour
+                            // - All past tasks (shifted to current hour via snowplow effect)
+                            if (hourIndex === 0) {
+                              return task.startHour === hour || taskIsInPast;
+                            }
+                            
+                            // For other slots, only show tasks that are:
+                            // - Scheduled for exactly this hour
+                            // - Not in the past (those are shifted to the first slot)
+                            return task.startHour === hour && !taskIsInPast;
+                          });
 
                           return (
                             <DroppableTimeSlot key={`${monteur.id}-${hour}`} monteurId={monteur.id} hour={hour}>
