@@ -24,6 +24,11 @@ function Disposition() {
   const [error, setError] = useState<string | null>(null);
   const [activeOrder, setActiveOrder] = useState<Auftrag | null>(null);
   const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => !prev);
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -111,8 +116,8 @@ function Disposition() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100">
-        <Sidebar />
-        <div className="ml-64 flex items-center justify-center min-h-screen">
+        <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} />
+        <div className={`${isSidebarCollapsed ? 'ml-16' : 'ml-64'} transition-all duration-300 ease-in-out flex items-center justify-center min-h-screen`}>
           <div className="text-center">
             <svg className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -133,8 +138,8 @@ function Disposition() {
       onDragEnd={handleDragEnd}
     >
       <div className="min-h-screen bg-gray-100">
-        <Sidebar />
-        <div className="ml-64">
+        <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} />
+        <div className={`${isSidebarCollapsed ? 'ml-16' : 'ml-64'} transition-all duration-300 ease-in-out`}>
           {/* Header */}
           <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
             <div className="px-4 py-4">
