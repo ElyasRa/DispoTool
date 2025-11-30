@@ -29,7 +29,7 @@ import { Auftrag, Monteur } from '../types/models';
 // Type definitions for Elektro & Sanitär domain
 interface OpenOrder {
   id: number;
-  type: 'Wasserrohrbruch' | 'Sicherung defekt' | 'Heizungsausfall' | 'Notdienst' | 'Sanitär' | 'Elektro';
+  type: 'Wasserrohrbruch' | 'Sicherung defekt' | 'Heizungsausfall' | 'Notdienst' | 'Rohrinstallation' | 'Steckdose/Schalter';
   category: 'elektro' | 'sanitär';
   address: string;
   orderNumber: string;
@@ -47,7 +47,7 @@ interface Technician {
 interface ScheduledTask {
   id: number;
   resourceId: string;
-  orderId: number;
+  orderId: number | null; // null for pre-existing legacy tasks
   title: string;
   type: string;
   startHour: number;
@@ -55,14 +55,17 @@ interface ScheduledTask {
   color: string;
 }
 
+// Counter for generating unique task IDs
+let taskIdCounter = 1000;
+
 // Mock data for open orders - Elektro & Sanitär domain
 const initialOpenOrders: OpenOrder[] = [
   { id: 1, type: 'Wasserrohrbruch', category: 'sanitär', address: 'Hauptstr. 12, Berlin', orderNumber: 'E-2024-001', priority: 'high', customerName: 'Fam. Schneider', estimatedDuration: 2 },
   { id: 2, type: 'Sicherung defekt', category: 'elektro', address: 'Bahnhofstr. 5, München', orderNumber: 'E-2024-002', priority: 'normal', customerName: 'Hr. Weber', estimatedDuration: 1 },
   { id: 3, type: 'Heizungsausfall', category: 'sanitär', address: 'Marktplatz 8, Hamburg', orderNumber: 'E-2024-003', priority: 'high', customerName: 'Fr. Müller', estimatedDuration: 3 },
-  { id: 4, type: 'Elektro', category: 'elektro', address: 'Industriestr. 22, Frankfurt', orderNumber: 'E-2024-004', priority: 'low', customerName: 'Fa. Schmidt GmbH', estimatedDuration: 2 },
+  { id: 4, type: 'Steckdose/Schalter', category: 'elektro', address: 'Industriestr. 22, Frankfurt', orderNumber: 'E-2024-004', priority: 'low', customerName: 'Fa. Schmidt GmbH', estimatedDuration: 2 },
   { id: 5, type: 'Notdienst', category: 'sanitär', address: 'Königsallee 45, Düsseldorf', orderNumber: 'E-2024-005', priority: 'high', customerName: 'Hr. Fischer', estimatedDuration: 1 },
-  { id: 6, type: 'Sanitär', category: 'sanitär', address: 'Schillerstr. 3, Stuttgart', orderNumber: 'E-2024-006', priority: 'normal', customerName: 'Fam. Braun', estimatedDuration: 2 },
+  { id: 6, type: 'Rohrinstallation', category: 'sanitär', address: 'Schillerstr. 3, Stuttgart', orderNumber: 'E-2024-006', priority: 'normal', customerName: 'Fam. Braun', estimatedDuration: 2 },
 ];
 
 // Mock data for technicians (Techniker/Monteure)
@@ -74,14 +77,14 @@ const mockTechnicians: Technician[] = [
   { id: 'T05', name: 'A. Becker (Allrounder)', specialty: 'both' },
 ];
 
-// Mock data for scheduled tasks (initially scheduled Einsätze)
+// Mock data for scheduled tasks (initially scheduled Einsätze - legacy tasks with null orderId)
 const initialScheduledTasks: ScheduledTask[] = [
-  { id: 101, resourceId: 'T01', orderId: 0, title: 'E-2024-010', type: 'Elektro', startHour: 8, duration: 2, color: 'bg-purple-500' },
-  { id: 102, resourceId: 'T01', orderId: 0, title: 'E-2024-011', type: 'Elektro', startHour: 11, duration: 1, color: 'bg-purple-500' },
-  { id: 103, resourceId: 'T02', orderId: 0, title: 'E-2024-012', type: 'Sanitär', startHour: 9, duration: 3, color: 'bg-cyan-500' },
-  { id: 104, resourceId: 'T03', orderId: 0, title: 'E-2024-013', type: 'Elektro', startHour: 10, duration: 2, color: 'bg-purple-500' },
-  { id: 105, resourceId: 'T04', orderId: 0, title: 'E-2024-014', type: 'Sanitär', startHour: 14, duration: 2, color: 'bg-cyan-500' },
-  { id: 106, resourceId: 'T05', orderId: 0, title: 'E-2024-015', type: 'Elektro', startHour: 8, duration: 2, color: 'bg-purple-500' },
+  { id: 101, resourceId: 'T01', orderId: null, title: 'E-2024-010', type: 'Steckdose/Schalter', startHour: 8, duration: 2, color: 'bg-purple-500' },
+  { id: 102, resourceId: 'T01', orderId: null, title: 'E-2024-011', type: 'Sicherung defekt', startHour: 11, duration: 1, color: 'bg-purple-500' },
+  { id: 103, resourceId: 'T02', orderId: null, title: 'E-2024-012', type: 'Rohrinstallation', startHour: 9, duration: 3, color: 'bg-cyan-500' },
+  { id: 104, resourceId: 'T03', orderId: null, title: 'E-2024-013', type: 'Sicherung defekt', startHour: 10, duration: 2, color: 'bg-purple-500' },
+  { id: 105, resourceId: 'T04', orderId: null, title: 'E-2024-014', type: 'Wasserrohrbruch', startHour: 14, duration: 2, color: 'bg-cyan-500' },
+  { id: 106, resourceId: 'T05', orderId: null, title: 'E-2024-015', type: 'Steckdose/Schalter', startHour: 8, duration: 2, color: 'bg-purple-500' },
 ];
 
 // Time slots for the timeline (08:00 - 18:00), representing 10 hours of working time
@@ -113,10 +116,19 @@ function DraggableOrderCard({ order }: { order: OpenOrder }) {
         return <Flame size={16} className="text-orange-600" />;
       case 'Notdienst':
         return <AlertTriangle size={16} className="text-red-600" />;
+      case 'Rohrinstallation':
+        return <Droplet size={16} className="text-cyan-600" />;
+      case 'Steckdose/Schalter':
+        return <Zap size={16} className="text-purple-600" />;
       default:
-        return order.category === 'elektro' 
-          ? <Zap size={16} className="text-purple-600" />
-          : <Droplet size={16} className="text-cyan-600" />;
+        // Fallback based on category, with final fallback for unknown values
+        if (order.category === 'elektro') {
+          return <Zap size={16} className="text-purple-600" />;
+        } else if (order.category === 'sanitär') {
+          return <Droplet size={16} className="text-cyan-600" />;
+        }
+        // Final fallback for completely unknown types/categories
+        return <AlertTriangle size={16} className="text-gray-500" />;
     }
   };
 
@@ -309,9 +321,10 @@ function Disposition() {
 
       if (hasConflict) return;
 
-      // Create new scheduled task
+      // Create new scheduled task with unique counter-based ID
+      const newTaskId = ++taskIdCounter;
       const newTask: ScheduledTask = {
-        id: Date.now(),
+        id: newTaskId,
         resourceId: technicianId,
         orderId: order.id,
         title: order.orderNumber,
