@@ -122,9 +122,11 @@ const tasksOverlap = (task1: ScheduledTask, task2: ScheduledTask): boolean => {
 };
 
 // Calculate vertical positions for overlapping tasks (stacking)
-const calculateTaskStackPositions = (tasks: ScheduledTask[]): Map<number, number> => {
+// Returns both positions map and max stack depth to avoid recalculation
+const calculateTaskStackPositions = (tasks: ScheduledTask[]): { positions: Map<number, number>; maxDepth: number } => {
   const positions = new Map<number, number>();
   const sortedTasks = [...tasks].sort((a, b) => a.startHour - b.startHour);
+  let maxLevel = 0;
   
   for (const task of sortedTasks) {
     // Find which stack levels are already occupied by overlapping tasks
@@ -144,19 +146,10 @@ const calculateTaskStackPositions = (tasks: ScheduledTask[]): Map<number, number
       level++;
     }
     positions.set(task.id, level);
-  }
-  
-  return positions;
-};
-
-// Calculate the maximum stack depth for a set of tasks
-const calculateMaxStackDepth = (tasks: ScheduledTask[]): number => {
-  const positions = calculateTaskStackPositions(tasks);
-  let maxLevel = 0;
-  for (const level of positions.values()) {
     maxLevel = Math.max(maxLevel, level);
   }
-  return maxLevel + 1; // +1 because levels are 0-indexed
+  
+  return { positions, maxDepth: maxLevel + 1 }; // +1 because levels are 0-indexed
 };
 
 // Helper function to format hour display
@@ -458,9 +451,8 @@ function Disposition() {
                   // - Must have no tasks scheduled in the current timeline view
                   const rowBgColor = monteur.isFree && !hasActiveTasks ? 'bg-green-50' : 'bg-white';
 
-                  // Calculate stack positions for overlapping tasks
-                  const taskStackPositions = calculateTaskStackPositions(monteurTasks);
-                  const maxStackDepth = calculateMaxStackDepth(monteurTasks);
+                  // Calculate stack positions for overlapping tasks (returns both positions and maxDepth)
+                  const { positions: taskStackPositions, maxDepth: maxStackDepth } = calculateTaskStackPositions(monteurTasks);
                   // Calculate dynamic row height based on stacking depth
                   const rowHeight = Math.max(MIN_ROW_HEIGHT, maxStackDepth * (TASK_BAR_HEIGHT + TASK_STACK_GAP) + 20);
 
