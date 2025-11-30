@@ -46,6 +46,11 @@ interface ScheduledTask {
   duration: number; // Duration in hours
   isEmergency: boolean; // Red for emergencies, blue for standard
   category: 'elektro' | 'sanitär' | 'heizung';
+  // Fields for tracking original order data when scheduling from open orders.
+  // These are populated when an OpenOrder is dropped onto the timeline and used
+  // to restore the order when unscheduling (dragging back to Open Orders).
+  originalOrderId?: number; // Original OpenOrder.id for restoring when unscheduled
+  originalLabel?: string; // Original OpenOrder.label for restoring when unscheduled
 }
 
 // Open Order for left column - Handwerker domain
@@ -168,6 +173,51 @@ function DraggableOrderCard({ order }: { order: OpenOrder }) {
   );
 }
 
+// Draggable Scheduled Task Component
+function DraggableScheduledTask({ task }: { task: ScheduledTask }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `task-${task.id}`,
+    data: { task, type: 'scheduled-task' },
+  });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: isDragging ? 1000 : undefined,
+        opacity: isDragging ? 0.5 : 1,
+      }
+    : undefined;
+
+  const baseClassName = 'w-full bg-gray-300 border-l-8 border-red-600 rounded shadow-sm ' +
+    'flex flex-col justify-between px-2 py-1 text-xs cursor-grab active:cursor-grabbing ' +
+    'hover:shadow-md transition-shadow overflow-hidden mb-1';
+  const draggingClassName = isDragging ? 'ring-2 ring-blue-500' : '';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`${baseClassName} ${draggingClassName}`}
+      title={`${task.title}, ${task.address}`}
+    >
+      {/* Task content: title and address */}
+      <div className="flex-1 min-h-0">
+        <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
+        <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
+      </div>
+      {/* Small white icon/label box at bottom left */}
+      <div className="flex items-center mt-1">
+        <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
+          <MapPin size={10} className="text-gray-500" />
+          <span className="truncate max-w-[60px]">{task.category}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // Droppable Timeline Slot Component
 function DroppableTimeSlot({
   monteurId,
@@ -180,7 +230,7 @@ function DroppableTimeSlot({
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `slot-${monteurId}-${hour}`,
-    data: { monteurId, hour },
+    data: { monteurId, hour, type: 'timeline-slot' },
   });
 
   return (
@@ -188,6 +238,25 @@ function DroppableTimeSlot({
       ref={setNodeRef}
       className={`flex-1 min-w-[60px] border-r border-gray-200 flex flex-col p-1 ${
         isOver ? 'bg-blue-100' : ''
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Droppable Open Orders Sidebar Component
+function DroppableOpenOrdersSidebar({ children }: { children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'open-orders-sidebar',
+    data: { type: 'open-orders' },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-1 overflow-y-auto p-3 space-y-2 transition-colors ${
+        isOver ? 'bg-blue-100' : 'bg-gray-50'
       }`}
     >
       {children}
@@ -205,6 +274,7 @@ function Disposition() {
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>(initialScheduledTasks);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>(mockOpenOrders);
   const [activeOrder, setActiveOrder] = useState<OpenOrder | null>(null);
+  const [activeTask, setActiveTask] = useState<ScheduledTask | null>(null);
   
   // Current hour state for dynamic timeline
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
@@ -275,52 +345,127 @@ function Disposition() {
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    const order = openOrders.find((o) => `order-${o.id}` === active.id);
-    if (order) {
-      setActiveOrder(order);
+    const activeId = active.id as string;
+    
+    // Check if dragging an open order
+    if (activeId.startsWith('order-')) {
+      const order = openOrders.find((o) => `order-${o.id}` === activeId);
+      if (order) {
+        setActiveOrder(order);
+        setActiveTask(null);
+      }
+    }
+    // Check if dragging a scheduled task
+    else if (activeId.startsWith('task-')) {
+      const task = scheduledTasks.find((t) => `task-${t.id}` === activeId);
+      if (task) {
+        setActiveTask(task);
+        setActiveOrder(null);
+      }
     }
   };
 
   // Handle drag end - snap to grid
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    const activeId = active.id as string;
+    
+    // Reset drag state
     setActiveOrder(null);
+    setActiveTask(null);
 
     if (!over) return;
 
     const overId = over.id as string;
-    if (!overId.startsWith('slot-')) return;
+    
+    // Scenario 1: OpenOrder -> Timeline (existing logic)
+    if (activeId.startsWith('order-') && overId.startsWith('slot-')) {
+      // Parse the drop target
+      const parts = overId.split('-');
+      const monteurId = parts[1];
+      const dropHour = parseInt(parts[2], 10);
 
-    // Parse the drop target
-    const parts = overId.split('-');
-    const monteurId = parts[1];
-    const dropHour = parseInt(parts[2], 10);
+      // Get the dragged order
+      const order = openOrders.find((o) => `order-${o.id}` === activeId);
+      if (!order) return;
 
-    // Get the dragged order
-    const order = openOrders.find((o) => `order-${o.id}` === active.id);
-    if (!order) return;
+      // The dropHour comes directly from a valid droppable time slot
+      const startHour = dropHour;
 
-    // The dropHour comes directly from a valid droppable time slot
-    // No need to snap or clamp since the slot ID already contains a valid hour
-    const startHour = dropHour;
+      // Create new scheduled task
+      const newTask: ScheduledTask = {
+        id: Date.now(),
+        resourceId: monteurId,
+        title: order.title,
+        address: order.address,
+        startHour: startHour,
+        duration: 2, // Default duration
+        isEmergency: order.label === 'Notfall' || order.label === 'Dringend',
+        category: order.category,
+        originalOrderId: order.id,
+        originalLabel: order.label,
+      };
 
-    // Create new scheduled task
-    const newTask: ScheduledTask = {
-      id: Date.now(),
-      resourceId: monteurId,
-      title: order.title,
-      address: order.address,
-      startHour: startHour,
-      duration: 2, // Default duration
-      isEmergency: order.label === 'Notfall' || order.label === 'Dringend',
-      category: order.category,
-    };
+      // Add to scheduled tasks
+      setScheduledTasks((prev) => [...prev, newTask]);
 
-    // Add to scheduled tasks
-    setScheduledTasks((prev) => [...prev, newTask]);
+      // Remove from open orders
+      setOpenOrders((prev) => prev.filter((o) => o.id !== order.id));
+      return;
+    }
+    
+    // Scenario 2: ScheduledTask -> Timeline (reassign/reschedule)
+    if (activeId.startsWith('task-') && overId.startsWith('slot-')) {
+      // Parse the drop target
+      const parts = overId.split('-');
+      const monteurId = parts[1];
+      const dropHour = parseInt(parts[2], 10);
 
-    // Remove from open orders
-    setOpenOrders((prev) => prev.filter((o) => o.id !== order.id));
+      // Get the dragged task
+      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const task = scheduledTasks.find((t) => t.id === taskId);
+      if (!task) return;
+
+      // Update the task with new resource and time
+      setScheduledTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? { ...t, resourceId: monteurId, startHour: dropHour }
+            : t
+        )
+      );
+      return;
+    }
+    
+    // Scenario 3: ScheduledTask -> Open Orders (unschedule)
+    if (activeId.startsWith('task-') && overId === 'open-orders-sidebar') {
+      // Get the dragged task
+      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const task = scheduledTasks.find((t) => t.id === taskId);
+      if (!task) return;
+
+      // Generate a unique order ID using the task's original ID or a counter-based approach
+      const orderId = task.originalOrderId ?? (1000 + openOrders.length + 1);
+      
+      // Create an open order from the task
+      const newOrder: OpenOrder = {
+        id: orderId,
+        orderNumber: task.originalOrderId 
+          ? `A-${new Date().getFullYear()}-${String(task.originalOrderId).padStart(3, '0')}`
+          : `A-${new Date().getFullYear()}-${String(orderId).padStart(3, '0')}`,
+        title: task.title,
+        address: task.address,
+        label: task.originalLabel || (task.isEmergency ? 'Dringend' : 'Neu'),
+        category: task.category,
+      };
+
+      // Remove from scheduled tasks
+      setScheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
+
+      // Add back to open orders
+      setOpenOrders((prev) => [...prev, newOrder]);
+      return;
+    }
   };
 
   return (
@@ -357,12 +502,12 @@ function Disposition() {
                 </div>
               </div>
 
-              {/* Orders List */}
-              <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
+              {/* Orders List - Droppable for unscheduling tasks */}
+              <DroppableOpenOrdersSidebar>
                 {openOrders.map((order) => (
                   <DraggableOrderCard key={order.id} order={order} />
                 ))}
-              </div>
+              </DroppableOpenOrdersSidebar>
             </div>
 
             {/* ========== CENTER COLUMN - Gantt Chart / Plantafel (45%) ========== */}
@@ -507,26 +652,9 @@ function Disposition() {
 
                           return (
                             <DroppableTimeSlot key={`${monteur.id}-${hour}`} monteurId={monteur.id} hour={hour}>
-                              {/* Render tasks stacked vertically inside the cell */}
+                              {/* Render draggable tasks stacked vertically inside the cell */}
                               {tasksForThisCell.map((task) => (
-                                <div
-                                  key={task.id}
-                                  className="w-full bg-gray-300 border-l-8 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden mb-1"
-                                  title={`${task.title}, ${task.address}`}
-                                >
-                                  {/* Task content: title and address */}
-                                  <div className="flex-1 min-h-0">
-                                    <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
-                                    <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
-                                  </div>
-                                  {/* Small white icon/label box at bottom left */}
-                                  <div className="flex items-center mt-1">
-                                    <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
-                                      <MapPin size={10} className="text-gray-500" />
-                                      <span className="truncate max-w-[60px]">{task.category}</span>
-                                    </span>
-                                  </div>
-                                </div>
+                                <DraggableScheduledTask key={task.id} task={task} />
                               ))}
                             </DroppableTimeSlot>
                           );
@@ -598,6 +726,17 @@ function Disposition() {
               </div>
               <span className="inline-block bg-yellow-400 text-yellow-900 text-xs font-medium px-2 py-0.5 rounded">
                 {activeOrder.label}
+              </span>
+            </div>
+          ) : activeTask ? (
+            <div className="bg-gray-300 border-l-8 border-red-600 rounded shadow-lg px-3 py-2 opacity-90 w-48">
+              <div className="font-semibold text-sm text-gray-800 mb-1">{activeTask.title}</div>
+              <div className="flex items-start gap-1 mb-2">
+                <MapPin size={12} className="text-gray-500 mt-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-600 leading-tight">{activeTask.address}</span>
+              </div>
+              <span className="inline-block bg-white text-gray-700 text-xs font-medium px-2 py-0.5 rounded shadow-sm">
+                {activeTask.category}
               </span>
             </div>
           ) : null}
