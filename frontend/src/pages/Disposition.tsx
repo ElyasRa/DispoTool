@@ -30,7 +30,7 @@ import { Auftrag, Monteur } from '../types/models';
 type OrderStatus = 'zugewiesen' | 'angenommen' | 'erledigt' | null;
 
 // Helper function to get order status display properties
-const getOrderStatusDisplay = (status: OrderStatus): { className: string; text: string } | null => {
+const getOrderStatusDisplay = (status: OrderStatus): { className: string; text: string } => {
   switch (status) {
     case 'zugewiesen':
       return { className: 'bg-blue-500', text: '(P) Fahrer beauftragt' };
@@ -39,7 +39,22 @@ const getOrderStatusDisplay = (status: OrderStatus): { className: string; text: 
     case 'erledigt':
       return { className: 'bg-green-500', text: 'Auftrag erledigt' };
     default:
-      return null;
+      // null status = no active order = Einsatzbereit (Ready)
+      return { className: 'bg-green-500', text: 'Einsatzbereit' };
+  }
+};
+
+// Helper function to get task border color based on status
+const getTaskBorderColor = (status: 'zugewiesen' | 'angenommen' | 'erledigt'): string => {
+  switch (status) {
+    case 'zugewiesen':
+      return 'border-blue-600'; // Blue for Beauftragt (Assigned)
+    case 'angenommen':
+      return 'border-red-600'; // Red for Angenommen (In Progress/Accepted)
+    case 'erledigt':
+      return 'border-green-600'; // Green for Erledigt (Done)
+    default:
+      return 'border-blue-600'; // Default to blue
   }
 };
 
@@ -66,6 +81,7 @@ interface ScheduledTask {
   duration: number; // Duration in hours
   isEmergency: boolean; // Red for emergencies, blue for standard
   category: 'elektro' | 'sanitär' | 'heizung';
+  status: 'zugewiesen' | 'angenommen' | 'erledigt'; // Task status for border color
   // Fields for tracking original order data when scheduling from open orders.
   // These are populated when an OpenOrder is dropped onto the timeline and used
   // to restore the order when unscheduling (dragging back to Open Orders).
@@ -100,14 +116,14 @@ const mockMonteure: MonteurResource[] = [
 
 // Mock data for scheduled tasks - Sanitär, Elektro, Heizung domain (8-18 Uhr)
 const initialScheduledTasks: ScheduledTask[] = [
-  { id: 101, resourceId: 'M01', title: 'Stromausfall', address: 'Hauptstr. 12', startHour: 8, duration: 2, isEmergency: true, category: 'elektro' },
-  { id: 102, resourceId: 'M01', title: 'Steckdose defekt', address: 'Berliner Str. 5', startHour: 11, duration: 1, isEmergency: false, category: 'elektro' },
-  { id: 103, resourceId: 'M04', title: 'Rohrbruch', address: 'Musterstr. 1', startHour: 9, duration: 3, isEmergency: true, category: 'sanitär' },
-  { id: 104, resourceId: 'M06', title: 'Sicherung prüfen', address: 'Industrieweg 22', startHour: 10, duration: 2, isEmergency: false, category: 'elektro' },
-  { id: 105, resourceId: 'M04', title: 'Heizungsausfall', address: 'Parkstr. 8', startHour: 14, duration: 3, isEmergency: true, category: 'heizung' },
-  { id: 106, resourceId: 'M08', title: 'Therme Wartung', address: 'Ringstr. 45', startHour: 8, duration: 2, isEmergency: false, category: 'heizung' },
-  { id: 107, resourceId: 'M06', title: 'Lampe Installation', address: 'Schulweg 3', startHour: 14, duration: 2, isEmergency: false, category: 'elektro' },
-  { id: 108, resourceId: 'M08', title: 'Heizkörper tauschen', address: 'Marktplatz 7', startHour: 11, duration: 3, isEmergency: false, category: 'heizung' },
+  { id: 101, resourceId: 'M01', title: 'Stromausfall', address: 'Hauptstr. 12', startHour: 8, duration: 2, isEmergency: true, category: 'elektro', status: 'zugewiesen' },
+  { id: 102, resourceId: 'M01', title: 'Steckdose defekt', address: 'Berliner Str. 5', startHour: 11, duration: 1, isEmergency: false, category: 'elektro', status: 'zugewiesen' },
+  { id: 103, resourceId: 'M04', title: 'Rohrbruch', address: 'Musterstr. 1', startHour: 9, duration: 3, isEmergency: true, category: 'sanitär', status: 'angenommen' },
+  { id: 104, resourceId: 'M06', title: 'Sicherung prüfen', address: 'Industrieweg 22', startHour: 10, duration: 2, isEmergency: false, category: 'elektro', status: 'angenommen' },
+  { id: 105, resourceId: 'M04', title: 'Heizungsausfall', address: 'Parkstr. 8', startHour: 14, duration: 3, isEmergency: true, category: 'heizung', status: 'zugewiesen' },
+  { id: 106, resourceId: 'M08', title: 'Therme Wartung', address: 'Ringstr. 45', startHour: 8, duration: 2, isEmergency: false, category: 'heizung', status: 'zugewiesen' },
+  { id: 107, resourceId: 'M06', title: 'Lampe Installation', address: 'Schulweg 3', startHour: 14, duration: 2, isEmergency: false, category: 'elektro', status: 'erledigt' },
+  { id: 108, resourceId: 'M08', title: 'Heizkörper tauschen', address: 'Marktplatz 7', startHour: 11, duration: 3, isEmergency: false, category: 'heizung', status: 'angenommen' },
 ];
 
 // Mock data for open orders (left column) - Handwerker domain
@@ -223,7 +239,10 @@ function DraggableScheduledTask({ task }: { task: ScheduledTask }) {
       }
     : undefined;
 
-  const baseClassName = 'w-full bg-gray-300 border-l-8 border-red-600 rounded shadow-sm ' +
+  // Get dynamic border color based on task status
+  const borderColorClass = getTaskBorderColor(task.status);
+
+  const baseClassName = `w-full bg-gray-300 border-l-8 ${borderColorClass} rounded shadow-sm ` +
     'flex flex-col justify-between px-2 py-1 text-xs cursor-grab active:cursor-grabbing ' +
     'hover:shadow-md transition-shadow overflow-hidden mb-1';
   const draggingClassName = isDragging ? 'ring-2 ring-blue-500' : '';
@@ -585,6 +604,7 @@ function Disposition() {
         duration: 2, // Default duration
         isEmergency: order.label === 'Notfall' || order.label === 'Dringend',
         category: order.category,
+        status: 'zugewiesen', // Default status when scheduling a new task
         originalOrderId: order.id,
         originalLabel: order.label,
       };
@@ -909,7 +929,7 @@ function Disposition() {
                           {(() => {
                             const currentStatus = monteurOrderStatus[monteur.id] ?? null;
                             const statusDisplay = getOrderStatusDisplay(currentStatus);
-                            return statusDisplay ? (
+                            return (
                               <div className="mb-2">
                                 <span
                                   className={`inline-block text-white text-[10px] px-2 py-0.5 rounded font-medium ${statusDisplay.className}`}
@@ -917,7 +937,7 @@ function Disposition() {
                                   {statusDisplay.text}
                                 </span>
                               </div>
-                            ) : null;
+                            );
                           })()}
 
                           {/* Fahrzeit anzeigen Button */}
@@ -982,8 +1002,16 @@ function Disposition() {
                   <h4 className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Legende</h4>
                   <div className="flex flex-wrap gap-4 text-xs">
                     <div className="flex items-center gap-1.5">
+                      <span className="w-4 h-3 rounded border-l-[6px] border-l-blue-600 bg-gray-300"></span>
+                      <span className="text-gray-600">Beauftragt</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <span className="w-4 h-3 rounded border-l-[6px] border-l-red-600 bg-gray-300"></span>
-                      <span className="text-gray-600">Auftrag</span>
+                      <span className="text-gray-600">Angenommen</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-4 h-3 rounded border-l-[6px] border-l-green-600 bg-gray-300"></span>
+                      <span className="text-gray-600">Erledigt</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded bg-green-100 border border-green-300"></span>
@@ -1042,7 +1070,7 @@ function Disposition() {
               </span>
             </div>
           ) : activeTask ? (
-            <div className="bg-gray-300 border-l-8 border-red-600 rounded shadow-lg px-3 py-2 opacity-90 w-48">
+            <div className={`bg-gray-300 border-l-8 ${getTaskBorderColor(activeTask.status)} rounded shadow-lg px-3 py-2 opacity-90 w-48`}>
               <div className="font-semibold text-sm text-gray-800 mb-1">{activeTask.title}</div>
               <div className="flex items-start gap-1 mb-2">
                 <MapPin size={12} className="text-gray-500 mt-0.5 flex-shrink-0" />
