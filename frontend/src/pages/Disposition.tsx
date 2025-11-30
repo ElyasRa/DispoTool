@@ -108,11 +108,13 @@ const TIMELINE_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
 // Snap interval in hours (0.5 = 30 minutes)
 const SNAP_INTERVAL = 0.5;
 // Task bar height for stacking calculations
-const TASK_BAR_HEIGHT = 70;
+const TASK_BAR_HEIGHT = 56;
 // Vertical gap between stacked tasks
-const TASK_STACK_GAP = 8;
+const TASK_STACK_GAP = 6;
 // Minimum row height
-const MIN_ROW_HEIGHT = 120;
+const MIN_ROW_HEIGHT = 100;
+// Vertical padding for task positioning within cells
+const TASK_VERTICAL_PADDING = 6;
 
 // Helper function to check if two tasks overlap in time
 const tasksOverlap = (task1: ScheduledTask, task2: ScheduledTask): boolean => {
@@ -454,7 +456,7 @@ function Disposition() {
                   // Calculate stack positions for overlapping tasks (returns both positions and maxDepth)
                   const { positions: taskStackPositions, maxDepth: maxStackDepth } = calculateTaskStackPositions(monteurTasks);
                   // Calculate dynamic row height based on stacking depth
-                  const rowHeight = Math.max(MIN_ROW_HEIGHT, maxStackDepth * (TASK_BAR_HEIGHT + TASK_STACK_GAP) + 20);
+                  const rowHeight = Math.max(MIN_ROW_HEIGHT, maxStackDepth * (TASK_BAR_HEIGHT + TASK_STACK_GAP) + TASK_VERTICAL_PADDING * 2);
 
                   return (
                     <div
@@ -515,17 +517,17 @@ function Disposition() {
                           
                           // Get stack level for this task (0-indexed)
                           const stackLevel = taskStackPositions.get(task.id) || 0;
-                          // Calculate top position based on stack level
-                          const topPosition = 8 + stackLevel * (TASK_BAR_HEIGHT + TASK_STACK_GAP);
+                          // Calculate top position based on stack level with proper vertical padding
+                          const topPosition = TASK_VERTICAL_PADDING + stackLevel * (TASK_BAR_HEIGHT + TASK_STACK_GAP);
 
                           return (
                             <div
                               key={task.id}
-                              className="absolute bg-gray-300 border-l-8 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1.5 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
+                              className="absolute bg-gray-300 border-l-4 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
                               style={{
                                 left: `${left}%`,
                                 width: `${width}%`,
-                                minWidth: '70px',
+                                minWidth: '60px',
                                 height: `${TASK_BAR_HEIGHT}px`,
                                 top: `${topPosition}px`,
                               }}
