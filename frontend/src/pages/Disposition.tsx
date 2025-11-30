@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -96,17 +96,22 @@ const mockOpenOrders: OpenOrder[] = [
   { id: 10, orderNumber: 'A-2024-010', title: 'Fußbodenheizung', address: 'Waldweg 2, 10117 Berlin', label: 'Termin heute', category: 'heizung' },
 ];
 
-// Time slots for the timeline - showing work hours (8:00 - 18:00)
-// We display 11 hour markers but the working duration is 10 hours (8-18)
-const timeSlots = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-// Timeline starts at hour 8
-const TIMELINE_START_HOUR = 8;
-// Timeline ends at hour 18
-const TIMELINE_END_HOUR = 18;
+// Number of hours to display in the timeline (current hour + N hours ahead)
+const TIMELINE_HOURS_COUNT = 5; // Shows current hour + 4 hours ahead
 // Snap interval in hours (0.5 = 30 minutes)
 const SNAP_INTERVAL = 0.5;
 // Minimum row height
 const MIN_ROW_HEIGHT = 100;
+
+// Helper function to generate dynamic time slots starting from current hour
+const generateTimeSlots = (startHour: number): number[] => {
+  const slots: number[] = [];
+  for (let i = 0; i < TIMELINE_HOURS_COUNT; i++) {
+    // Handle midnight wraparound (e.g., 23 -> 0 -> 1)
+    slots.push((startHour + i) % 24);
+  }
+  return slots;
+};
 
 // Helper function to format hour display
 const formatHour = (hour: number): string => {
@@ -190,6 +195,24 @@ function Disposition() {
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>(initialScheduledTasks);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>(mockOpenOrders);
   const [activeOrder, setActiveOrder] = useState<OpenOrder | null>(null);
+  
+  // Current hour state for dynamic timeline
+  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  
+  // Generate dynamic time slots based on current hour
+  const timeSlots = useMemo(() => generateTimeSlots(currentHour), [currentHour]);
+  
+  // Update current hour every minute to keep timeline fresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newHour = new Date().getHours();
+      if (newHour !== currentHour) {
+        setCurrentHour(newHour);
+      }
+    }, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [currentHour]);
 
   // Empty arrays for map - map shows placeholder when no API key is configured
   const mockOrdersForMap: Auftrag[] = [];
@@ -267,11 +290,11 @@ function Disposition() {
     const order = openOrders.find((o) => `order-${o.id}` === active.id);
     if (!order) return;
 
-    // Snap to nearest interval
+    // The dropped hour is already within the visible timeline slots
+    // Just use the dropHour directly since it's from a valid droppable slot
     const snappedHour = Math.round(dropHour / SNAP_INTERVAL) * SNAP_INTERVAL;
-    // Clamp to valid range: start at TIMELINE_START_HOUR, end at TIMELINE_END_HOUR - task duration
-    // We allow tasks to start at any hour from 8 to 17 (last hour where a 1-hour task fits)
-    const clampedHour = Math.max(TIMELINE_START_HOUR, Math.min(snappedHour, TIMELINE_END_HOUR - 1));
+    // Ensure it stays within the visible time slots
+    const clampedHour = timeSlots.includes(snappedHour) ? snappedHour : dropHour;
 
     // Create new scheduled task
     const newTask: ScheduledTask = {
@@ -455,11 +478,28 @@ function Disposition() {
                       {/* Timeline Area with Droppable Slots containing Tasks */}
                       <div className="flex-1 flex">
                         {/* Droppable Time Slots with Tasks Rendered Inside */}
-                        {timeSlots.map((hour) => {
-                          // Filter tasks that start at this specific hour for this monteur
-                          const tasksForThisCell = monteurTasks.filter(
-                            (task) => task.startHour === hour
-                          );
+                        {timeSlots.map((hour, hourIndex) => {
+                          // Auto-shift logic (Snowplow Effect):
+                          // Tasks scheduled in the past are displayed at the current hour (first slot)
+                          // A task is "in the past" if its startHour is before currentHour
+                          const tasksForThisCell = monteurTasks.filter((task) => {
+                            // For the first slot (current hour), collect all past tasks
+                            if (hourIndex === 0) {
+                              // Check if task is in the past (considering midnight wraparound)
+                              // A task is in the past if:
+                              // - task.startHour < currentHour (simple case, e.g., task at 8, current is 10)
+                              // OR
+                              // - task.startHour > 12 && currentHour < 12 (midnight wraparound, e.g., task at 22, current is 2)
+                              const isTaskInPast = 
+                                (task.startHour < currentHour && !(task.startHour > 12 && currentHour < 12)) ||
+                                (task.startHour > 12 && currentHour < 12 && task.startHour > currentHour);
+                              
+                              return task.startHour === hour || isTaskInPast;
+                            }
+                            // For other slots, only show tasks that are actually scheduled for that hour
+                            // and are not in the past (they would have been shifted to the first slot)
+                            return task.startHour === hour && task.startHour >= currentHour;
+                          });
 
                           return (
                             <DroppableTimeSlot key={`${monteur.id}-${hour}`} monteurId={monteur.id} hour={hour}>
