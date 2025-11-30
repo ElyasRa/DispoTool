@@ -54,6 +54,9 @@ interface ScheduledTask {
   originalLabel?: string; // Original OpenOrder.label for restoring when unscheduled
 }
 
+// Category type for filtering orders and monteure
+type CategoryFilter = 'all' | 'elektro' | 'sanitär' | 'heizung';
+
 // Open Order for left column - Handwerker domain
 interface OpenOrder {
   id: number;
@@ -132,6 +135,18 @@ const isHourInPast = (taskHour: number, currentHour: number): boolean => {
 // Helper function to format hour display
 const formatHour = (hour: number): string => {
   return `${hour.toString().padStart(2, '0')}:00`;
+};
+
+// Helper function to extract order ID from drag event active ID
+const extractOrderId = (activeId: string): number | null => {
+  if (!activeId.startsWith('order-')) return null;
+  return parseInt(activeId.replace('order-', ''), 10);
+};
+
+// Helper function to extract task ID from drag event active ID
+const extractTaskId = (activeId: string): number | null => {
+  if (!activeId.startsWith('task-')) return null;
+  return parseInt(activeId.replace('task-', ''), 10);
 };
 
 // Draggable Order Card Component
@@ -265,7 +280,16 @@ function DroppableOpenOrdersSidebar({ children }: { children: React.ReactNode })
   );
 }
 
-// Droppable Cancel Order Dropzone Component
+/**
+ * Droppable Cancel Order Dropzone Component.
+ * 
+ * A drop target for cancelling orders. Users can drag either open orders
+ * from the sidebar or scheduled tasks from the timeline onto this zone
+ * to remove them from the dispatch view.
+ * 
+ * Visual feedback: The zone displays a red background when an item is
+ * dragged over it, indicating it's ready to accept the drop.
+ */
 function DroppableCancelOrderZone() {
   const { setNodeRef, isOver } = useDroppable({
     id: 'cancel-order-zone',
@@ -303,7 +327,7 @@ function Disposition() {
   const [searchText, setSearchText] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'elektro' | 'sanitär' | 'heizung'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   
   // Current hour state for dynamic timeline
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
@@ -321,13 +345,13 @@ function Disposition() {
     }
     
     // Apply search text filter
-    if (searchText.trim()) {
-      const searchLower = searchText.toLowerCase().trim();
+    const trimmedSearch = searchText.trim().toLowerCase();
+    if (trimmedSearch) {
       filtered = filtered.filter(
         (order) =>
-          order.title.toLowerCase().includes(searchLower) ||
-          order.address.toLowerCase().includes(searchLower) ||
-          order.orderNumber.toLowerCase().includes(searchLower)
+          order.title.toLowerCase().includes(trimmedSearch) ||
+          order.address.toLowerCase().includes(trimmedSearch) ||
+          order.orderNumber.toLowerCase().includes(trimmedSearch)
       );
     }
     
@@ -474,7 +498,8 @@ function Disposition() {
       const dropHour = parseInt(parts[2], 10);
 
       // Get the dragged task
-      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const taskId = extractTaskId(activeId);
+      if (taskId === null) return;
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
@@ -492,7 +517,8 @@ function Disposition() {
     // Scenario 3: ScheduledTask -> Open Orders (unschedule)
     if (activeId.startsWith('task-') && overId === 'open-orders-sidebar') {
       // Get the dragged task
-      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const taskId = extractTaskId(activeId);
+      if (taskId === null) return;
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
@@ -521,17 +547,18 @@ function Disposition() {
     
     // Scenario 4: OpenOrder -> Cancel Zone (cancel order from sidebar)
     if (activeId.startsWith('order-') && overId === 'cancel-order-zone') {
-      const order = openOrders.find((o) => `order-${o.id}` === activeId);
-      if (!order) return;
+      const orderId = extractOrderId(activeId);
+      if (orderId === null) return;
       
       // Remove from open orders (effectively cancelling it)
-      setOpenOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setOpenOrders((prev) => prev.filter((o) => o.id !== orderId));
       return;
     }
     
     // Scenario 5: ScheduledTask -> Cancel Zone (cancel scheduled task)
     if (activeId.startsWith('task-') && overId === 'cancel-order-zone') {
-      const taskId = parseInt(activeId.replace('task-', ''), 10);
+      const taskId = extractTaskId(activeId);
+      if (taskId === null) return;
       
       // Remove from scheduled tasks (effectively cancelling it)
       setScheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -622,7 +649,7 @@ function Disposition() {
                   <label className="text-xs text-gray-600 mb-1 block">Kategorie filtern:</label>
                   <select
                     value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value as 'all' | 'elektro' | 'sanitär' | 'heizung')}
+                    onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
                     className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
                     <option value="all">Alle Kategorien</option>
@@ -639,9 +666,13 @@ function Disposition() {
                   <DraggableOrderCard key={order.id} order={order} />
                 ))}
                 {filteredOpenOrders.length === 0 && (
-                  <div className="text-center text-gray-400 text-xs py-4">
+                  <p 
+                    className="text-center text-gray-400 text-xs py-4"
+                    role="status"
+                    aria-live="polite"
+                  >
                     Keine Aufträge gefunden
-                  </div>
+                  </p>
                 )}
               </DroppableOpenOrdersSidebar>
               
