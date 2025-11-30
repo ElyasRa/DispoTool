@@ -63,3 +63,9 @@ export interface AssignOrderResponse {
   order: Auftrag;
   telegram_sent: boolean;
 }
+
+// Response type for unschedule operation
+export interface UnscheduleOrderResponse {
+  message: string;
+  order: Auftrag;
+}

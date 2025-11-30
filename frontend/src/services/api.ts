@@ -1,4 +1,4 @@
-import { Auftrag, Monteur, AssignOrderResponse } from '../types/models';
+import { Auftrag, Monteur, AssignOrderResponse, UnscheduleOrderResponse } from '../types/models';
 
 const API_BASE = 'http://49.13.128.160:3000/api';
 
@@ -60,6 +60,15 @@ export const orderApi = {
     apiRequest(`/orders/${orderId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    }),
+  
+  /**
+   * Unschedule an order - removes driver assignment and resets status to 'Neu' (open).
+   * Called when a task is dragged from the timeline back to Open Orders or Cancel zone.
+   */
+  unschedule: (orderId: number): Promise<UnscheduleOrderResponse> =>
+    apiRequest(`/orders/${orderId}/unschedule`, {
+      method: 'PUT',
     }),
 };
 

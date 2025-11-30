@@ -25,6 +25,7 @@ import {
 import DispositionMap from '../components/DispositionMap';
 import Sidebar from '../components/Sidebar';
 import { Auftrag, Monteur } from '../types/models';
+import { orderApi } from '../services/api';
 
 // Order status for live tracking display
 type OrderStatus = 'zugewiesen' | 'angenommen' | 'erledigt' | null;
@@ -670,6 +671,8 @@ function Disposition() {
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
+      const previousMonteurId = task.resourceId;
+
       // Generate a unique order ID using the task's original ID or a counter-based approach
       const orderId = task.originalOrderId ?? (1000 + openOrders.length + 1);
       
@@ -690,6 +693,23 @@ function Disposition() {
 
       // Add back to open orders
       setOpenOrders((prev) => [...prev, newOrder]);
+      
+      // Update monteur status: if they have no more tasks, set to "Einsatzbereit" (null/ready)
+      const remainingTasks = scheduledTasks.filter(
+        (t) => t.resourceId === previousMonteurId && t.id !== taskId
+      );
+      if (remainingTasks.length === 0) {
+        updateMonteurStatus(previousMonteurId, null);
+      }
+      
+      // Persist the change to the backend by calling the unschedule API
+      // This clears the driverId/assignment and sets status to 'Neu' (open)
+      if (task.originalOrderId) {
+        orderApi.unschedule(task.originalOrderId).catch((error) => {
+          console.error('Failed to unschedule order in backend:', error);
+          // Note: UI already updated, log error but don't revert to avoid flickering
+        });
+      }
       return;
     }
     
@@ -707,9 +727,30 @@ function Disposition() {
     if (activeId.startsWith('task-') && overId === 'cancel-order-zone') {
       const taskId = extractTaskId(activeId);
       if (taskId === null) return;
+      const task = scheduledTasks.find((t) => t.id === taskId);
+      if (!task) return;
+      
+      const previousMonteurId = task.resourceId;
       
       // Remove from scheduled tasks (effectively cancelling it)
       setScheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
+      
+      // Update monteur status: if they have no more tasks, set to "Einsatzbereit" (null/ready)
+      const remainingTasks = scheduledTasks.filter(
+        (t) => t.resourceId === previousMonteurId && t.id !== taskId
+      );
+      if (remainingTasks.length === 0) {
+        updateMonteurStatus(previousMonteurId, null);
+      }
+      
+      // Persist the change to the backend by calling the unschedule API
+      // This clears the driverId/assignment and sets status to 'Neu' (open)
+      if (task.originalOrderId) {
+        orderApi.unschedule(task.originalOrderId).catch((error) => {
+          console.error('Failed to unschedule order in backend:', error);
+          // Note: UI already updated, log error but don't revert to avoid flickering
+        });
+      }
       return;
     }
   };
