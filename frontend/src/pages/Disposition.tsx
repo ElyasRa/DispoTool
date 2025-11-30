@@ -46,8 +46,11 @@ interface ScheduledTask {
   duration: number; // Duration in hours
   isEmergency: boolean; // Red for emergencies, blue for standard
   category: 'elektro' | 'sanitär' | 'heizung';
-  originalOrderId?: number; // Reference to original order for unscheduling
-  originalLabel?: string; // Original label from open order
+  // Fields for tracking original order data when scheduling from open orders.
+  // These are populated when an OpenOrder is dropped onto the timeline and used
+  // to restore the order when unscheduling (dragging back to Open Orders).
+  originalOrderId?: number; // Original OpenOrder.id for restoring when unscheduled
+  originalLabel?: string; // Original OpenOrder.label for restoring when unscheduled
 }
 
 // Open Order for left column - Handwerker domain
@@ -185,15 +188,18 @@ function DraggableScheduledTask({ task }: { task: ScheduledTask }) {
       }
     : undefined;
 
+  const baseClassName = 'w-full bg-gray-300 border-l-8 border-red-600 rounded shadow-sm ' +
+    'flex flex-col justify-between px-2 py-1 text-xs cursor-grab active:cursor-grabbing ' +
+    'hover:shadow-md transition-shadow overflow-hidden mb-1';
+  const draggingClassName = isDragging ? 'ring-2 ring-blue-500' : '';
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...listeners}
       {...attributes}
-      className={`w-full bg-gray-300 border-l-8 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1 text-xs cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow overflow-hidden mb-1 ${
-        isDragging ? 'ring-2 ring-blue-500' : ''
-      }`}
+      className={`${baseClassName} ${draggingClassName}`}
       title={`${task.title}, ${task.address}`}
     >
       {/* Task content: title and address */}
@@ -438,10 +444,15 @@ function Disposition() {
       const task = scheduledTasks.find((t) => t.id === taskId);
       if (!task) return;
 
+      // Generate a unique order ID using the task's original ID or a counter-based approach
+      const orderId = task.originalOrderId ?? (1000 + openOrders.length + 1);
+      
       // Create an open order from the task
       const newOrder: OpenOrder = {
-        id: task.originalOrderId || Date.now(),
-        orderNumber: `A-${new Date().getFullYear()}-${String(task.originalOrderId || Date.now()).slice(-3)}`,
+        id: orderId,
+        orderNumber: task.originalOrderId 
+          ? `A-${new Date().getFullYear()}-${String(task.originalOrderId).padStart(3, '0')}`
+          : `A-${new Date().getFullYear()}-${String(orderId).padStart(3, '0')}`,
         title: task.title,
         address: task.address,
         label: task.originalLabel || (task.isEmergency ? 'Dringend' : 'Neu'),
