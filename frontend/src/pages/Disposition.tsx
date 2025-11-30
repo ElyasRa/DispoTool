@@ -107,6 +107,50 @@ const TIMELINE_END_HOUR = 18;
 const TIMELINE_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
 // Snap interval in hours (0.5 = 30 minutes)
 const SNAP_INTERVAL = 0.5;
+// Task bar height for stacking calculations
+const TASK_BAR_HEIGHT = 70;
+// Vertical gap between stacked tasks
+const TASK_STACK_GAP = 8;
+// Minimum row height
+const MIN_ROW_HEIGHT = 120;
+
+// Helper function to check if two tasks overlap in time
+const tasksOverlap = (task1: ScheduledTask, task2: ScheduledTask): boolean => {
+  const task1End = task1.startHour + task1.duration;
+  const task2End = task2.startHour + task2.duration;
+  return task1.startHour < task2End && task2.startHour < task1End;
+};
+
+// Calculate vertical positions for overlapping tasks (stacking)
+// Returns both positions map and max stack depth to avoid recalculation
+const calculateTaskStackPositions = (tasks: ScheduledTask[]): { positions: Map<number, number>; maxDepth: number } => {
+  const positions = new Map<number, number>();
+  const sortedTasks = [...tasks].sort((a, b) => a.startHour - b.startHour);
+  let maxLevel = 0;
+  
+  for (const task of sortedTasks) {
+    // Find which stack levels are already occupied by overlapping tasks
+    const occupiedLevels = new Set<number>();
+    for (const otherTask of sortedTasks) {
+      if (otherTask.id !== task.id && tasksOverlap(task, otherTask)) {
+        const otherLevel = positions.get(otherTask.id);
+        if (otherLevel !== undefined) {
+          occupiedLevels.add(otherLevel);
+        }
+      }
+    }
+    
+    // Find the first available level
+    let level = 0;
+    while (occupiedLevels.has(level)) {
+      level++;
+    }
+    positions.set(task.id, level);
+    maxLevel = Math.max(maxLevel, level);
+  }
+  
+  return { positions, maxDepth: maxLevel + 1 }; // +1 because levels are 0-indexed
+};
 
 // Helper function to format hour display
 const formatHour = (hour: number): string => {
@@ -398,18 +442,25 @@ function Disposition() {
 
                 {/* Monteur Rows */}
                 {filteredMonteure.map((monteur) => {
+                  // Get tasks for this monteur
+                  const monteurTasks = scheduledTasks.filter((t) => t.resourceId === monteur.id);
                   // Check if monteur has any scheduled tasks in the current view
-                  const hasActiveTasks = scheduledTasks.some((t) => t.resourceId === monteur.id);
+                  const hasActiveTasks = monteurTasks.length > 0;
                   // Green background indicates the monteur is available for new assignments:
                   // - Must be marked as "free" (not on break, not off duty)
                   // - Must have no tasks scheduled in the current timeline view
                   const rowBgColor = monteur.isFree && !hasActiveTasks ? 'bg-green-50' : 'bg-white';
 
+                  // Calculate stack positions for overlapping tasks (returns both positions and maxDepth)
+                  const { positions: taskStackPositions, maxDepth: maxStackDepth } = calculateTaskStackPositions(monteurTasks);
+                  // Calculate dynamic row height based on stacking depth
+                  const rowHeight = Math.max(MIN_ROW_HEIGHT, maxStackDepth * (TASK_BAR_HEIGHT + TASK_STACK_GAP) + 20);
+
                   return (
                     <div
                       key={monteur.id}
                       className={`flex border-b border-gray-200 ${rowBgColor} hover:bg-opacity-80 transition-colors`}
-                      style={{ minHeight: '120px' }}
+                      style={{ minHeight: `${rowHeight}px` }}
                     >
                       {/* Monteur Info Cell */}
                       <div className="w-44 min-w-[176px] border-r border-gray-300 flex flex-col">
@@ -457,34 +508,44 @@ function Disposition() {
                           <DroppableTimeSlot key={`${monteur.id}-${hour}`} monteurId={monteur.id} hour={hour} />
                         ))}
 
-                        {/* Task Bars */}
-                        {scheduledTasks
-                          .filter((task) => task.resourceId === monteur.id)
-                          .map((task) => {
-                            const left = ((task.startHour - TIMELINE_START_HOUR) / TIMELINE_HOURS) * 100;
-                            const width = (task.duration / TIMELINE_HOURS) * 100;
+                        {/* Task Bars - With vertical stacking for overlapping tasks */}
+                        {monteurTasks.map((task) => {
+                          const left = ((task.startHour - TIMELINE_START_HOUR) / TIMELINE_HOURS) * 100;
+                          const width = (task.duration / TIMELINE_HOURS) * 100;
+                          
+                          // Get stack level for this task (0-indexed)
+                          const stackLevel = taskStackPositions.get(task.id) || 0;
+                          // Calculate top position based on stack level
+                          const topPosition = 8 + stackLevel * (TASK_BAR_HEIGHT + TASK_STACK_GAP);
 
-                            // Color based on emergency status
-                            const borderColor = task.isEmergency ? 'border-l-red-500' : 'border-l-blue-500';
-                            const bgColor = task.isEmergency ? 'bg-red-50' : 'bg-blue-50';
-
-                            return (
-                              <div
-                                key={task.id}
-                                className={`absolute top-3 ${bgColor} ${borderColor} border-l-4 rounded shadow-sm flex flex-col justify-center px-2 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden`}
-                                style={{
-                                  left: `${left}%`,
-                                  width: `${width}%`,
-                                  minWidth: '70px',
-                                  height: '55px',
-                                }}
-                                title={`${task.title}, ${task.address}`}
-                              >
-                                <span className="font-semibold text-gray-800 truncate">{task.title}</span>
-                                <span className="text-[10px] text-gray-500 truncate">{task.address}</span>
+                          return (
+                            <div
+                              key={task.id}
+                              className="absolute bg-gray-300 border-l-8 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1.5 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
+                              style={{
+                                left: `${left}%`,
+                                width: `${width}%`,
+                                minWidth: '70px',
+                                height: `${TASK_BAR_HEIGHT}px`,
+                                top: `${topPosition}px`,
+                              }}
+                              title={`${task.title}, ${task.address}`}
+                            >
+                              {/* Task content: title and address */}
+                              <div className="flex-1 min-h-0">
+                                <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
+                                <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
                               </div>
-                            );
-                          })}
+                              {/* Small white icon/label box at bottom left */}
+                              <div className="flex items-center mt-1">
+                                <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
+                                  <MapPin size={10} className="text-gray-500" />
+                                  <span className="truncate max-w-[60px]">{task.category}</span>
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -495,12 +556,8 @@ function Disposition() {
                   <h4 className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Legende</h4>
                   <div className="flex flex-wrap gap-4 text-xs">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded border-l-4 border-l-red-500 bg-red-50"></span>
-                      <span className="text-gray-600">Notfall / Dringend</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded border-l-4 border-l-blue-500 bg-blue-50"></span>
-                      <span className="text-gray-600">Standard</span>
+                      <span className="w-4 h-3 rounded border-l-[6px] border-l-red-600 bg-gray-300"></span>
+                      <span className="text-gray-600">Auftrag</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded bg-green-100 border border-green-300"></span>
