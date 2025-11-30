@@ -41,7 +41,7 @@ const mockResources: Array<{
   { id: 'M31', name: 'M31 - LKW', type: 'truck' },
 ];
 
-// Mock data for timeline tasks
+// Mock data for timeline tasks (startHour uses integer hours for consistency with timeSlots)
 const mockTasks: Array<{
   id: number;
   resourceId: string;
@@ -51,26 +51,31 @@ const mockTasks: Array<{
   color: string;
 }> = [
   { id: 1, resourceId: 'M18', title: 'A-2024-010', startHour: 8, duration: 2, color: 'bg-blue-500' },
-  { id: 2, resourceId: 'M18', title: 'A-2024-011', startHour: 11, duration: 1.5, color: 'bg-green-500' },
+  { id: 2, resourceId: 'M18', title: 'A-2024-011', startHour: 11, duration: 1, color: 'bg-green-500' },
   { id: 3, resourceId: 'M23', title: 'A-2024-012', startHour: 9, duration: 3, color: 'bg-purple-500' },
   { id: 4, resourceId: 'M05', title: 'A-2024-013', startHour: 10, duration: 2, color: 'bg-orange-500' },
-  { id: 5, resourceId: 'M05', title: 'A-2024-014', startHour: 14, duration: 2.5, color: 'bg-blue-500' },
-  { id: 6, resourceId: 'M12', title: 'A-2024-015', startHour: 8.5, duration: 1.5, color: 'bg-green-500' },
+  { id: 5, resourceId: 'M05', title: 'A-2024-014', startHour: 14, duration: 2, color: 'bg-blue-500' },
+  { id: 6, resourceId: 'M12', title: 'A-2024-015', startHour: 8, duration: 2, color: 'bg-green-500' },
   { id: 7, resourceId: 'M12', title: 'A-2024-016', startHour: 12, duration: 2, color: 'bg-purple-500' },
   { id: 8, resourceId: 'M31', title: 'A-2024-017', startHour: 13, duration: 3, color: 'bg-orange-500' },
 ];
 
-// Time slots for the timeline (08:00 - 18:00)
+// Time slots for the timeline (08:00 - 18:00), representing 10 hours of working time
 const timeSlots = Array.from({ length: 11 }, (_, i) => i + 8);
+// Timeline spans 10 hours (from 08:00 to 18:00)
+const TIMELINE_HOURS = 10;
 
 function Disposition() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  // TODO: Implement week view mode in future iteration
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  // TODO: Pass mapType to DispositionMap when satellite view is supported
   const [mapType, setMapType] = useState<'map' | 'satellite'>('map');
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Mock orders and monteure for the map component
+  // Empty arrays for map - map shows placeholder when no API key is configured
+  // In production, these would be populated from API calls
   const mockOrdersForMap: Auftrag[] = [];
   const mockMonteureForMap: Monteur[] = [];
 
@@ -321,8 +326,8 @@ function Disposition() {
                     {mockTasks
                       .filter((task) => task.resourceId === resource.id)
                       .map((task) => {
-                        const left = ((task.startHour - 8) / 10) * 100;
-                        const width = (task.duration / 10) * 100;
+                        const left = ((task.startHour - 8) / TIMELINE_HOURS) * 100;
+                        const width = (task.duration / TIMELINE_HOURS) * 100;
                         return (
                           <div
                             key={task.id}
