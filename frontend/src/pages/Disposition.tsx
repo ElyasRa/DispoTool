@@ -9,17 +9,15 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
+import { RefreshCw } from 'lucide-react';
 import OrderCard from '../components/OrderCard';
 import MonteurCard from '../components/MonteurCard';
 import DispositionMap from '../components/DispositionMap';
+import Sidebar from '../components/Sidebar';
 import { Auftrag, Monteur } from '../types/models';
 import { orderApi, monteurApi } from '../services/api';
 
-interface DispositionProps {
-  onLogout: () => void;
-}
-
-function Disposition({ onLogout }: DispositionProps) {
+function Disposition() {
   const [orders, setOrders] = useState<Auftrag[]>([]);
   const [monteure, setMonteure] = useState<Monteur[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,13 +110,16 @@ function Disposition({ onLogout }: DispositionProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <svg className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <p className="text-gray-600">Disposition wird geladen...</p>
+      <div className="min-h-screen bg-gray-100">
+        <Sidebar />
+        <div className="ml-64 flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <svg className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <p className="text-gray-600">Disposition wird geladen...</p>
+          </div>
         </div>
       </div>
     );
@@ -132,34 +133,28 @@ function Disposition({ onLogout }: DispositionProps) {
       onDragEnd={handleDragEnd}
     >
       <div className="min-h-screen bg-gray-100">
-        {/* Header */}
-        <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-2xl font-bold">Disposition Board</h1>
-                <p className="text-blue-100 text-sm">Aufträge per Drag & Drop zuweisen</p>
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={fetchData}
-                  className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Aktualisieren
-                </button>
-                <button
-                  onClick={onLogout}
-                  className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
-                >
-                  Logout
-                </button>
+        <Sidebar />
+        <div className="ml-64">
+          {/* Header */}
+          <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
+            <div className="px-4 py-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-2xl font-bold">Disposition Board</h1>
+                  <p className="text-blue-100 text-sm">Aufträge per Drag & Drop zuweisen</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={fetchData}
+                    className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <RefreshCw size={16} />
+                    Aktualisieren
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
 
         {/* Notifications */}
         {error && (
@@ -188,7 +183,7 @@ function Disposition({ onLogout }: DispositionProps) {
         )}
 
         {/* Main Content */}
-        <main className="container mx-auto px-4 py-6">
+        <main className="px-4 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
             {/* Open Orders */}
             <div className="lg:col-span-3 bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
@@ -307,6 +302,7 @@ function Disposition({ onLogout }: DispositionProps) {
             </div>
           ) : null}
         </DragOverlay>
+        </div>
       </div>
     </DndContext>
   );
