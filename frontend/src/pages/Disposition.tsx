@@ -20,10 +20,14 @@ import {
   Search,
   Filter,
   X,
+  Clock,
 } from 'lucide-react';
 import DispositionMap from '../components/DispositionMap';
 import Sidebar from '../components/Sidebar';
 import { Auftrag, Monteur } from '../types/models';
+
+// Order status for live tracking display
+type OrderStatus = 'zugewiesen' | 'angenommen' | 'erledigt' | null;
 
 // Type definitions for Handwerker domain - Monteur represents a Technician
 interface MonteurResource {
@@ -35,6 +39,7 @@ interface MonteurResource {
   hasVehicle: boolean;
   hasLocation: boolean;
   specialty: 'elektro' | 'sanitär' | 'heizung' | 'all';
+  currentOrderStatus?: OrderStatus; // Status of current order for live tracking
 }
 
 // Task on the Gantt chart timeline
@@ -69,14 +74,14 @@ interface OpenOrder {
 
 // Mock data for Monteure (Techniker) - Handwerker-Leitstand style
 const mockMonteure: MonteurResource[] = [
-  { id: 'M01', monteurId: 'M18', role: 'Elektriker', name: 'Marco Pfeiffer', isFree: false, hasVehicle: true, hasLocation: true, specialty: 'elektro' },
-  { id: 'M02', monteurId: 'M22', role: 'Klempner', name: 'Hans Weber', isFree: true, hasVehicle: true, hasLocation: true, specialty: 'sanitär' },
-  { id: 'M03', monteurId: 'M15', role: 'Elektriker', name: 'Thomas Schmidt', isFree: true, hasVehicle: true, hasLocation: false, specialty: 'elektro' },
-  { id: 'M04', monteurId: 'M09', role: 'Heizungsbauer', name: 'Peter Müller', isFree: false, hasVehicle: true, hasLocation: true, specialty: 'heizung' },
-  { id: 'M05', monteurId: 'M31', role: 'Monteur', name: 'Andreas Becker', isFree: true, hasVehicle: false, hasLocation: true, specialty: 'all' },
-  { id: 'M06', monteurId: 'M27', role: 'Elektriker', name: 'Stefan Wagner', isFree: false, hasVehicle: true, hasLocation: true, specialty: 'elektro' },
-  { id: 'M07', monteurId: 'M33', role: 'Klempner', name: 'Klaus Fischer', isFree: true, hasVehicle: true, hasLocation: true, specialty: 'sanitär' },
-  { id: 'M08', monteurId: 'M44', role: 'Heizungsbauer', name: 'Uwe Braun', isFree: false, hasVehicle: true, hasLocation: false, specialty: 'heizung' },
+  { id: 'M01', monteurId: 'M18', role: 'Elektriker', name: 'Marco Pfeiffer', isFree: false, hasVehicle: true, hasLocation: true, specialty: 'elektro', currentOrderStatus: 'zugewiesen' },
+  { id: 'M02', monteurId: 'M22', role: 'Klempner', name: 'Hans Weber', isFree: true, hasVehicle: true, hasLocation: true, specialty: 'sanitär', currentOrderStatus: null },
+  { id: 'M03', monteurId: 'M15', role: 'Elektriker', name: 'Thomas Schmidt', isFree: true, hasVehicle: true, hasLocation: false, specialty: 'elektro', currentOrderStatus: 'erledigt' },
+  { id: 'M04', monteurId: 'M09', role: 'Heizungsbauer', name: 'Peter Müller', isFree: false, hasVehicle: true, hasLocation: true, specialty: 'heizung', currentOrderStatus: 'angenommen' },
+  { id: 'M05', monteurId: 'M31', role: 'Monteur', name: 'Andreas Becker', isFree: true, hasVehicle: false, hasLocation: true, specialty: 'all', currentOrderStatus: null },
+  { id: 'M06', monteurId: 'M27', role: 'Elektriker', name: 'Stefan Wagner', isFree: false, hasVehicle: true, hasLocation: true, specialty: 'elektro', currentOrderStatus: 'angenommen' },
+  { id: 'M07', monteurId: 'M33', role: 'Klempner', name: 'Klaus Fischer', isFree: true, hasVehicle: true, hasLocation: true, specialty: 'sanitär', currentOrderStatus: 'erledigt' },
+  { id: 'M08', monteurId: 'M44', role: 'Heizungsbauer', name: 'Uwe Braun', isFree: false, hasVehicle: true, hasLocation: false, specialty: 'heizung', currentOrderStatus: 'zugewiesen' },
 ];
 
 // Mock data for scheduled tasks - Sanitär, Elektro, Heizung domain (8-18 Uhr)
@@ -780,15 +785,39 @@ function Disposition() {
                             />
                           </div>
 
-                          {/* Status Badge */}
+                          {/* Live Status Badge - Order status */}
+                          {monteur.currentOrderStatus && (
+                            <div className="mb-2">
+                              <span
+                                className={`inline-block text-white text-[10px] px-2 py-0.5 rounded font-medium ${
+                                  monteur.currentOrderStatus === 'zugewiesen'
+                                    ? 'bg-blue-500'
+                                    : monteur.currentOrderStatus === 'angenommen'
+                                    ? 'bg-red-500'
+                                    : 'bg-green-500'
+                                }`}
+                              >
+                                {monteur.currentOrderStatus === 'zugewiesen'
+                                  ? '(P) Fahrer beauftragt'
+                                  : monteur.currentOrderStatus === 'angenommen'
+                                  ? 'Auftrag angenommen'
+                                  : 'Auftrag erledigt'}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Fahrzeit anzeigen Button */}
                           <div className="mb-2">
-                            <span
-                              className={`inline-block text-white text-[10px] px-2 py-0.5 rounded ${
-                                monteur.isFree ? 'bg-green-500' : 'bg-red-500'
-                              }`}
+                            <button
+                              className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded hover:bg-sky-200 transition-colors"
+                              onClick={() => {
+                                // TODO: Implement show drive time functionality
+                                console.log('Fahrzeit anzeigen für', monteur.name);
+                              }}
                             >
-                              {monteur.isFree ? 'Frei' : 'Beschäftigt'}
-                            </span>
+                              <Clock size={10} />
+                              Fahrzeit anzeigen
+                            </button>
                           </div>
                         </div>
 
