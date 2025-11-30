@@ -103,56 +103,10 @@ const timeSlots = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 const TIMELINE_START_HOUR = 8;
 // Timeline ends at hour 18
 const TIMELINE_END_HOUR = 18;
-// Timeline spans 10 hours for positioning calculations
-const TIMELINE_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
 // Snap interval in hours (0.5 = 30 minutes)
 const SNAP_INTERVAL = 0.5;
-// Task bar height for stacking calculations
-const TASK_BAR_HEIGHT = 56;
-// Vertical gap between stacked tasks
-const TASK_STACK_GAP = 6;
 // Minimum row height
 const MIN_ROW_HEIGHT = 100;
-// Vertical padding for task positioning within cells
-const TASK_VERTICAL_PADDING = 6;
-
-// Helper function to check if two tasks overlap in time
-const tasksOverlap = (task1: ScheduledTask, task2: ScheduledTask): boolean => {
-  const task1End = task1.startHour + task1.duration;
-  const task2End = task2.startHour + task2.duration;
-  return task1.startHour < task2End && task2.startHour < task1End;
-};
-
-// Calculate vertical positions for overlapping tasks (stacking)
-// Returns both positions map and max stack depth to avoid recalculation
-const calculateTaskStackPositions = (tasks: ScheduledTask[]): { positions: Map<number, number>; maxDepth: number } => {
-  const positions = new Map<number, number>();
-  const sortedTasks = [...tasks].sort((a, b) => a.startHour - b.startHour);
-  let maxLevel = 0;
-  
-  for (const task of sortedTasks) {
-    // Find which stack levels are already occupied by overlapping tasks
-    const occupiedLevels = new Set<number>();
-    for (const otherTask of sortedTasks) {
-      if (otherTask.id !== task.id && tasksOverlap(task, otherTask)) {
-        const otherLevel = positions.get(otherTask.id);
-        if (otherLevel !== undefined) {
-          occupiedLevels.add(otherLevel);
-        }
-      }
-    }
-    
-    // Find the first available level
-    let level = 0;
-    while (occupiedLevels.has(level)) {
-      level++;
-    }
-    positions.set(task.id, level);
-    maxLevel = Math.max(maxLevel, level);
-  }
-  
-  return { positions, maxDepth: maxLevel + 1 }; // +1 because levels are 0-indexed
-};
 
 // Helper function to format hour display
 const formatHour = (hour: number): string => {
@@ -217,7 +171,7 @@ function DroppableTimeSlot({
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 min-w-[60px] border-r border-gray-200 relative ${
+      className={`flex-1 min-w-[60px] border-r border-gray-200 flex flex-col p-1 ${
         isOver ? 'bg-blue-100' : ''
       }`}
     >
@@ -453,16 +407,11 @@ function Disposition() {
                   // - Must have no tasks scheduled in the current timeline view
                   const rowBgColor = monteur.isFree && !hasActiveTasks ? 'bg-green-50' : 'bg-white';
 
-                  // Calculate stack positions for overlapping tasks (returns both positions and maxDepth)
-                  const { positions: taskStackPositions, maxDepth: maxStackDepth } = calculateTaskStackPositions(monteurTasks);
-                  // Calculate dynamic row height based on stacking depth
-                  const rowHeight = Math.max(MIN_ROW_HEIGHT, maxStackDepth * (TASK_BAR_HEIGHT + TASK_STACK_GAP) + TASK_VERTICAL_PADDING * 2);
-
                   return (
                     <div
                       key={monteur.id}
                       className={`flex border-b border-gray-200 ${rowBgColor} hover:bg-opacity-80 transition-colors`}
-                      style={{ minHeight: `${rowHeight}px` }}
+                      style={{ minHeight: `${MIN_ROW_HEIGHT}px` }}
                     >
                       {/* Monteur Info Cell */}
                       <div className="w-44 min-w-[176px] border-r border-gray-300 flex flex-col">
@@ -503,49 +452,39 @@ function Disposition() {
                         </div>
                       </div>
 
-                      {/* Timeline Area with Droppable Slots and Task Bars */}
-                      <div className="flex-1 flex relative">
-                        {/* Droppable Time Slots */}
-                        {timeSlots.map((hour) => (
-                          <DroppableTimeSlot key={`${monteur.id}-${hour}`} monteurId={monteur.id} hour={hour} />
-                        ))}
-
-                        {/* Task Bars - With vertical stacking for overlapping tasks */}
-                        {monteurTasks.map((task) => {
-                          const left = ((task.startHour - TIMELINE_START_HOUR) / TIMELINE_HOURS) * 100;
-                          const width = (task.duration / TIMELINE_HOURS) * 100;
-                          
-                          // Get stack level for this task (0-indexed)
-                          const stackLevel = taskStackPositions.get(task.id) || 0;
-                          // Calculate top position based on stack level with proper vertical padding
-                          const topPosition = TASK_VERTICAL_PADDING + stackLevel * (TASK_BAR_HEIGHT + TASK_STACK_GAP);
+                      {/* Timeline Area with Droppable Slots containing Tasks */}
+                      <div className="flex-1 flex">
+                        {/* Droppable Time Slots with Tasks Rendered Inside */}
+                        {timeSlots.map((hour) => {
+                          // Filter tasks that start at this specific hour for this monteur
+                          const tasksForThisCell = monteurTasks.filter(
+                            (task) => task.startHour === hour
+                          );
 
                           return (
-                            <div
-                              key={task.id}
-                              className="absolute bg-gray-300 border-l-4 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
-                              style={{
-                                left: `${left}%`,
-                                width: `${width}%`,
-                                minWidth: '60px',
-                                height: `${TASK_BAR_HEIGHT}px`,
-                                top: `${topPosition}px`,
-                              }}
-                              title={`${task.title}, ${task.address}`}
-                            >
-                              {/* Task content: title and address */}
-                              <div className="flex-1 min-h-0">
-                                <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
-                                <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
-                              </div>
-                              {/* Small white icon/label box at bottom left */}
-                              <div className="flex items-center mt-1">
-                                <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
-                                  <MapPin size={10} className="text-gray-500" />
-                                  <span className="truncate max-w-[60px]">{task.category}</span>
-                                </span>
-                              </div>
-                            </div>
+                            <DroppableTimeSlot key={`${monteur.id}-${hour}`} monteurId={monteur.id} hour={hour}>
+                              {/* Render tasks stacked vertically inside the cell */}
+                              {tasksForThisCell.map((task) => (
+                                <div
+                                  key={task.id}
+                                  className="w-full bg-gray-300 border-l-8 border-red-600 rounded shadow-sm flex flex-col justify-between px-2 py-1 text-xs cursor-pointer hover:shadow-md transition-shadow overflow-hidden mb-1"
+                                  title={`${task.title}, ${task.address}`}
+                                >
+                                  {/* Task content: title and address */}
+                                  <div className="flex-1 min-h-0">
+                                    <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
+                                    <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
+                                  </div>
+                                  {/* Small white icon/label box at bottom left */}
+                                  <div className="flex items-center mt-1">
+                                    <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
+                                      <MapPin size={10} className="text-gray-500" />
+                                      <span className="truncate max-w-[60px]">{task.category}</span>
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </DroppableTimeSlot>
                           );
                         })}
                       </div>
