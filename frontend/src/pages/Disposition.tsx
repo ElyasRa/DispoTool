@@ -419,40 +419,35 @@ function Disposition() {
     const now = Date.now();
     const timersToSet: { monteurId: string; delay: number }[] = [];
 
+    // Helper function to clear an expired "erledigt" status
+    const clearErledigtStatus = (monteurId: string) => {
+      setMonteurOrderStatus((prev) => {
+        if (prev[monteurId] === 'erledigt') {
+          return { ...prev, [monteurId]: null };
+        }
+        return prev;
+      });
+      setErledigtVisibleUntil((prev) => {
+        const updated = { ...prev };
+        delete updated[monteurId];
+        return updated;
+      });
+    };
+
     Object.entries(erledigtVisibleUntil).forEach(([monteurId, visibleUntil]) => {
       const remaining = visibleUntil - now;
       if (remaining > 0) {
         timersToSet.push({ monteurId, delay: remaining });
       } else {
         // Already expired, hide immediately
-        setMonteurOrderStatus((prev) => {
-          if (prev[monteurId] === 'erledigt') {
-            return { ...prev, [monteurId]: null };
-          }
-          return prev;
-        });
-        setErledigtVisibleUntil((prev) => {
-          const updated = { ...prev };
-          delete updated[monteurId];
-          return updated;
-        });
+        clearErledigtStatus(monteurId);
       }
     });
 
     // Set up timers for remaining visible statuses
     const timeoutIds = timersToSet.map(({ monteurId, delay }) => {
       return setTimeout(() => {
-        setMonteurOrderStatus((prev) => {
-          if (prev[monteurId] === 'erledigt') {
-            return { ...prev, [monteurId]: null };
-          }
-          return prev;
-        });
-        setErledigtVisibleUntil((prev) => {
-          const updated = { ...prev };
-          delete updated[monteurId];
-          return updated;
-        });
+        clearErledigtStatus(monteurId);
       }, delay);
     });
 
