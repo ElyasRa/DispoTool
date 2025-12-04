@@ -188,12 +188,163 @@ const extractTaskId = (activeId: string): number | null => {
   return parseInt(activeId.replace('task-', ''), 10);
 };
 
+// Tooltip dimension constants for positioning calculations
+const TOOLTIP_WIDTH = 280;
+const TOOLTIP_OFFSET = 8;
+
+// Helper function to generate order number from ID
+const generateOrderNumber = (orderId: number): string => {
+  return `A-${new Date().getFullYear()}-${String(orderId).padStart(3, '0')}`;
+};
+
+// Helper function to calculate intelligent tooltip position
+const calculateTooltipPosition = (
+  rect: DOMRect,
+  screenWidth: number,
+  screenHeight: number
+): { top: number; left: number } => {
+  // Position tooltip to the right of the element by default
+  let tooltipLeft = rect.right + TOOLTIP_OFFSET;
+  let tooltipTop = rect.top;
+  
+  // If tooltip would go off screen right, position it to the left
+  if (tooltipLeft + TOOLTIP_WIDTH > screenWidth) {
+    tooltipLeft = rect.left - TOOLTIP_WIDTH - TOOLTIP_OFFSET;
+  }
+  
+  // If tooltip would go off screen bottom, adjust top
+  if (tooltipTop + 150 > screenHeight) {
+    tooltipTop = screenHeight - 160;
+  }
+  
+  return { top: tooltipTop, left: tooltipLeft };
+};
+
+// Helper function to get status display text in German
+const getStatusDisplayText = (status: TaskStatus): string => {
+  switch (status) {
+    case 'zugewiesen':
+      return 'Beauftragt';
+    case 'angenommen':
+      return 'Angenommen';
+    case 'erledigt':
+      return 'Erledigt';
+    default:
+      return 'Unbekannt';
+  }
+};
+
+// Helper function to get category display text in German
+const getCategoryDisplayText = (category: 'elektro' | 'sanitär' | 'heizung'): string => {
+  switch (category) {
+    case 'elektro':
+      return 'Elektro';
+    case 'sanitär':
+      return 'Sanitär';
+    case 'heizung':
+      return 'Heizung';
+  }
+};
+
+// Tooltip data interface for scheduled tasks
+interface TaskTooltipData {
+  orderNumber?: string;
+  title: string;
+  status: TaskStatus;
+  address: string;
+  category: 'elektro' | 'sanitär' | 'heizung';
+  label?: string;
+  isEmergency: boolean;
+}
+
+// Tooltip data interface for open orders
+interface OrderTooltipData {
+  orderNumber: string;
+  title: string;
+  address: string;
+  category: 'elektro' | 'sanitär' | 'heizung';
+  label: string;
+}
+
+// DetailedTooltip Component
+// Displays task/order details in a dark-themed tooltip with structured information
+function DetailedTooltip({
+  data,
+  type,
+  position,
+}: {
+  data: TaskTooltipData | OrderTooltipData;
+  type: 'task' | 'order';
+  position: { top: number; left: number };
+}) {
+  // Determine urgency label based on type
+  const urgencyLabel = type === 'task' 
+    ? (data as TaskTooltipData).label || ((data as TaskTooltipData).isEmergency ? 'Dringend' : 'Normal')
+    : (data as OrderTooltipData).label;
+
+  // For tasks, get status display; for orders, default status
+  const statusText = type === 'task' 
+    ? getStatusDisplayText((data as TaskTooltipData).status)
+    : 'Offen';
+
+  return (
+    <div
+      className="fixed bg-gray-800 text-white rounded-lg shadow-xl z-50 p-3 min-w-[200px] max-w-[280px] text-xs"
+      style={{
+        top: position.top,
+        left: position.left,
+      }}
+    >
+      {/* Tooltip content as key-value list */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between gap-4">
+          <span className="text-gray-400 font-medium">Auftrag:</span>
+          <span className="text-white text-right">
+            {type === 'order' 
+              ? (data as OrderTooltipData).orderNumber 
+              : (data as TaskTooltipData).orderNumber || data.title}
+          </span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-gray-400 font-medium">Status:</span>
+          <span className="text-white">{statusText}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-gray-400 font-medium">Einsatzort:</span>
+          <span className="text-white text-right truncate max-w-[150px]" title={data.address}>
+            {data.address}
+          </span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-gray-400 font-medium">Gewerk:</span>
+          <span className="text-white">{getCategoryDisplayText(data.category)}</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-gray-400 font-medium">Dringlichkeit:</span>
+          <span className={`font-medium ${
+            urgencyLabel === 'Notfall' || urgencyLabel === 'Dringend' 
+              ? 'text-red-400' 
+              : urgencyLabel === 'Termin heute' 
+                ? 'text-yellow-400' 
+                : 'text-green-400'
+          }`}>
+            {urgencyLabel}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Draggable Order Card Component
 function DraggableOrderCard({ order }: { order: OpenOrder }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `order-${order.id}`,
     data: { order },
   });
+  
+  const [isHovered, setIsHovered] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
   const style = transform
     ? {
@@ -203,28 +354,55 @@ function DraggableOrderCard({ order }: { order: OpenOrder }) {
       }
     : undefined;
 
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (isDragging) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const position = calculateTooltipPosition(rect, window.innerWidth, window.innerHeight);
+    setTooltipPosition(position);
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+  };
+
+  const tooltipData: OrderTooltipData = {
+    orderNumber: order.orderNumber,
+    title: order.title,
+    address: order.address,
+    category: order.category,
+    label: order.label,
+  };
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className={`bg-white rounded shadow-md p-2 mb-1 cursor-grab active:cursor-grabbing border-l-4 border-black hover:shadow-lg transition-shadow ${
-        isDragging ? 'ring-2 ring-blue-500' : ''
-      }`}
-    >
-      {/* Title */}
-      <div className="font-bold text-xs text-gray-900 mb-0.5">{order.title}</div>
-      {/* Address */}
-      <div className="flex items-start gap-1 mb-1">
-        <MapPin size={10} className="text-gray-400 mt-0.5 flex-shrink-0" />
-        <span className="text-xs text-gray-500 leading-tight">{order.address}</span>
+    <>
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...listeners}
+        {...attributes}
+        className={`bg-white rounded shadow-md p-2 mb-1 cursor-grab active:cursor-grabbing border-l-4 border-black hover:shadow-lg transition-shadow ${
+          isDragging ? 'ring-2 ring-blue-500' : ''
+        }`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Title */}
+        <div className="font-bold text-xs text-gray-900 mb-0.5">{order.title}</div>
+        {/* Address */}
+        <div className="flex items-start gap-1 mb-1">
+          <MapPin size={10} className="text-gray-400 mt-0.5 flex-shrink-0" />
+          <span className="text-xs text-gray-500 leading-tight">{order.address}</span>
+        </div>
+        {/* Label */}
+        <span className="inline-block bg-yellow-400 text-yellow-900 text-xs font-medium px-2 py-0.5 rounded">
+          {order.label}
+        </span>
       </div>
-      {/* Label */}
-      <span className="inline-block bg-yellow-400 text-yellow-900 text-xs font-medium px-2 py-0.5 rounded">
-        {order.label}
-      </span>
-    </div>
+      {isHovered && !isDragging && (
+        <DetailedTooltip data={tooltipData} type="order" position={tooltipPosition} />
+      )}
+    </>
   );
 }
 
@@ -234,6 +412,9 @@ function DraggableScheduledTask({ task }: { task: ScheduledTask }) {
     id: `task-${task.id}`,
     data: { task, type: 'scheduled-task' },
   });
+  
+  const [isHovered, setIsHovered] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
   const style = transform
     ? {
@@ -251,28 +432,56 @@ function DraggableScheduledTask({ task }: { task: ScheduledTask }) {
     'hover:shadow-md transition-shadow overflow-hidden mb-1';
   const draggingClassName = isDragging ? 'ring-2 ring-blue-500' : '';
 
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (isDragging) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const position = calculateTooltipPosition(rect, window.innerWidth, window.innerHeight);
+    setTooltipPosition(position);
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+  };
+
+  const tooltipData: TaskTooltipData = {
+    orderNumber: task.originalOrderId ? generateOrderNumber(task.originalOrderId) : undefined,
+    title: task.title,
+    status: task.status,
+    address: task.address,
+    category: task.category,
+    label: task.originalLabel,
+    isEmergency: task.isEmergency,
+  };
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className={`${baseClassName} ${draggingClassName}`}
-      title={`${task.title}, ${task.address}`}
-    >
-      {/* Task content: title and address */}
-      <div className="flex-1 min-h-0">
-        <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
-        <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
+    <>
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...listeners}
+        {...attributes}
+        className={`${baseClassName} ${draggingClassName}`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Task content: title and address */}
+        <div className="flex-1 min-h-0">
+          <span className="font-semibold text-gray-800 block truncate">{task.title}</span>
+          <span className="text-[10px] text-gray-600 block truncate">{task.address}</span>
+        </div>
+        {/* Small white icon/label box at bottom left */}
+        <div className="flex items-center mt-1">
+          <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
+            <MapPin size={10} className="text-gray-500" />
+            <span className="truncate max-w-[60px]">{task.category}</span>
+          </span>
+        </div>
       </div>
-      {/* Small white icon/label box at bottom left */}
-      <div className="flex items-center mt-1">
-        <span className="bg-white text-gray-700 text-[9px] font-medium px-1.5 py-0.5 rounded shadow-sm inline-flex items-center gap-1">
-          <MapPin size={10} className="text-gray-500" />
-          <span className="truncate max-w-[60px]">{task.category}</span>
-        </span>
-      </div>
-    </div>
+      {isHovered && !isDragging && (
+        <DetailedTooltip data={tooltipData} type="task" position={tooltipPosition} />
+      )}
+    </>
   );
 }
 
