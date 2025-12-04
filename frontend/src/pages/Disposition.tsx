@@ -491,11 +491,12 @@ function Disposition() {
       provision_pro_auftrag: 50,
       gps_latitude: 52.52 + (Math.random() - 0.5) * 0.1, // Random offset around Berlin
       gps_longitude: 13.40 + (Math.random() - 0.5) * 0.1,
-      status: m.isFree ? 'active' as const : 'active' as const,
+      status: m.isFree ? 'active' as const : 'inactive' as const,
     }));
-  }, []);
+  }, [mockMonteure]);
 
   // Transform openOrders to Auftrag[] with simulated coordinates around Berlin
+  // Note: Gewerk type only supports 'Elektro' | 'Klempner', so 'heizung' and 'sanitär' map to 'Klempner'
   const mockOrdersForMap: Auftrag[] = useMemo(() => {
     return openOrders.map((order, index) => ({
       id: order.id,
