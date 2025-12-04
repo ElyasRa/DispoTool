@@ -6,7 +6,7 @@
 export type AuftragStatus = 'Neu' | 'Zugewiesen' | 'Angenommen' | 'Erledigt' | 'Storno' | 'Abgelehnt';
 
 // Gewerk (Trade) type
-export type Gewerk = 'Elektro' | 'Klempner';
+export type Gewerk = 'Elektro' | 'Klempner' | 'Heizung';
 
 // Auftraggeber (Client) type
 export type AuftraggeberTyp = 'Privat' | 'Firma';
