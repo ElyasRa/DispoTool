@@ -479,9 +479,45 @@ function Disposition() {
     };
   }, [erledigtVisibleUntil]);
 
-  // Empty arrays for map - map shows placeholder when no API key is configured
-  const mockOrdersForMap: Auftrag[] = [];
-  const mockMonteureForMap: Monteur[] = [];
+  // Transform mockMonteure to Monteur[] with simulated GPS coordinates around Berlin (52.52, 13.40)
+  const mockMonteureForMap: Monteur[] = useMemo(() => {
+    return mockMonteure.map((m, index) => ({
+      id: index + 1,
+      name: m.name.split(' ').slice(-1)[0], // Extract last name
+      vorname: m.name.split(' ').slice(0, -1).join(' '), // Extract first name(s)
+      region: 'Berlin',
+      telefonnummer: '+49 30 123456' + index,
+      telegram_chat_id: m.hasLocation ? `chat_${m.id}` : null,
+      provision_pro_auftrag: 50,
+      gps_latitude: 52.52 + (Math.random() - 0.5) * 0.1, // Random offset around Berlin
+      gps_longitude: 13.40 + (Math.random() - 0.5) * 0.1,
+      status: m.isFree ? 'active' as const : 'active' as const,
+    }));
+  }, []);
+
+  // Transform openOrders to Auftrag[] with simulated coordinates around Berlin
+  const mockOrdersForMap: Auftrag[] = useMemo(() => {
+    return openOrders.map((order, index) => ({
+      id: order.id,
+      auftragsnummer: order.orderNumber,
+      gewerk: order.category === 'elektro' ? 'Elektro' as const : 'Klempner' as const,
+      region: 'Berlin',
+      auftraggeber_typ: 'Privat' as const,
+      name: 'Kunde',
+      vorname: `${order.title}`,
+      telefon: '+49 30 987654' + index,
+      strasse: order.address.split(',')[0] || order.address,
+      hausnummer: '',
+      plz: order.address.match(/\d{5}/)?.[0] || '10115',
+      stadt: 'Berlin',
+      latitude: 52.52 + (Math.random() - 0.5) * 0.1, // Random offset around Berlin
+      longitude: 13.40 + (Math.random() - 0.5) * 0.1,
+      status: 'Neu' as const,
+      erstellt_am: new Date().toISOString(),
+      zugewiesen_an: null,
+      erledigt_am: null,
+    }));
+  }, [openOrders]);
 
   // Drag and drop sensors
   const sensors = useSensors(
