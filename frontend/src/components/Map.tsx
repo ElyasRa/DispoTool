@@ -1,29 +1,6 @@
 import { useCallback, useState, memo, useMemo, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
-
-interface MapDriver {
-  id: number;
-  name: string;
-  location: {
-    lat: number;
-    lng: number;
-  };
-}
-
-interface MapOrder {
-  id: number;
-  title: string;
-  status: 'open';
-  location: {
-    lat: number;
-    lng: number;
-  };
-}
-
-interface MapDataResponse {
-  drivers: MapDriver[];
-  orders: MapOrder[];
-}
+import { mapApi, MapDriver, MapOrder } from '../services/api';
 
 const mapContainerStyle = {
   width: '100%',
@@ -35,8 +12,6 @@ const defaultCenter = {
   lat: 52.52,
   lng: 13.40,
 };
-
-const API_BASE = 'http://49.13.128.160:3000/api';
 
 function Map() {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -50,7 +25,7 @@ function Map() {
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
-    id: 'google-map-script',
+    id: 'main-map-script',
   });
 
   // Fetch map data from backend
@@ -58,11 +33,7 @@ function Map() {
     const fetchMapData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE}/map-data`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch map data');
-        }
-        const data: MapDataResponse = await response.json();
+        const data = await mapApi.getData();
         setDrivers(data.drivers);
         setOrders(data.orders);
         setError(null);

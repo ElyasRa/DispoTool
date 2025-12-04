@@ -96,3 +96,39 @@ export const monteurApi = {
       body: JSON.stringify(monteur),
     }),
 };
+
+/**
+ * Map data types
+ */
+interface MapDriver {
+  id: number;
+  name: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
+}
+
+interface MapOrder {
+  id: number;
+  title: string;
+  status: 'open';
+  location: {
+    lat: number;
+    lng: number;
+  };
+}
+
+interface MapDataResponse {
+  drivers: MapDriver[];
+  orders: MapOrder[];
+}
+
+/**
+ * Map API methods
+ */
+export const mapApi = {
+  getData: (): Promise<MapDataResponse> => apiRequest('/map-data'),
+};
+
+export type { MapDriver, MapOrder, MapDataResponse };
