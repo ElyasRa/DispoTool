@@ -27,8 +27,8 @@ const GEWERK_COLORS: Record<string, string> = {
   Heizung: '#EF4444',      // Red for Heating
 };
 
-// SVG path for a pipe/water drop icon (for Sanitär)
-const SANITAER_PATH = 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v-4h3l-4-5-4 5h3v4z';
+// SVG path for a water droplet icon (for Sanitär/Plumbing)
+const SANITAER_PATH = 'M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z';
 
 // SVG path for a lightning bolt icon (for Elektro)
 const ELEKTRO_PATH = 'M7 2v11h3v9l7-12h-4l4-8z';
@@ -94,20 +94,20 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
 
   // Create marker icons only when Google Maps is loaded
   // Uses gewerk (trade type) to determine marker appearance:
-  // - Klempner/Sanitär: Blue with water drop icon
-  // - Elektro: Yellow with lightning bolt icon  
-  // - Heizung: Red with flame icon
+  // - Klempner/Sanitär: Blue water droplet icon
+  // - Elektro: Yellow lightning bolt icon  
+  // - Heizung: Red flame icon
   const getOrderMarkerIcon = useMemo(() => {
     if (!isLoaded || typeof google === 'undefined') return () => undefined;
     
-    return (gewerk: string) => {
-      let path: string;
+    return (gewerk: string): google.maps.Symbol => {
+      let path: string | google.maps.SymbolPath;
       let fillColor: string;
       let scale: number;
       let anchor: google.maps.Point | undefined;
 
       switch (gewerk) {
-        case 'Klempner': // Sanitär - Blue water drop
+        case 'Klempner': // Sanitär - Blue water droplet
           path = SANITAER_PATH;
           fillColor = GEWERK_COLORS.Klempner;
           scale = 1.5;
@@ -126,7 +126,8 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
           anchor = new google.maps.Point(12, 20);
           break;
         default:
-          path = google.maps.SymbolPath.CIRCLE as unknown as string;
+          // Use built-in circle symbol for unknown trade types
+          path = google.maps.SymbolPath.CIRCLE;
           fillColor = '#EF4444';
           scale = 10;
           anchor = undefined;
