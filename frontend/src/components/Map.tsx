@@ -22,6 +22,7 @@ function Map() {
   const [selectedOrder, setSelectedOrder] = useState<MapOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
@@ -47,23 +48,10 @@ function Map() {
     fetchMapData();
   }, []);
 
-  // Show message if no API key is configured
-  if (!apiKey) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
-        <div className="text-center text-gray-600 p-4">
-          <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="font-medium mb-1">Google Maps API-Key nicht konfiguriert</p>
-          <p className="text-sm">Bitte setzen Sie VITE_GOOGLE_MAPS_API_KEY in der .env Datei</p>
-        </div>
-      </div>
-    );
-  }
+  // Fit bounds when data is loaded
+  useEffect(() => {
+    if (!map || (drivers.length === 0 && orders.length === 0)) return;
 
-  const onLoad = useCallback((map: google.maps.Map) => {
-    // Fit bounds to show all markers
     const bounds = new google.maps.LatLngBounds();
     let hasMarkers = false;
 
@@ -80,7 +68,26 @@ function Map() {
     if (hasMarkers) {
       map.fitBounds(bounds);
     }
-  }, [drivers, orders]);
+  }, [map, drivers, orders]);
+
+  const onLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+  }, []);
+
+  // Show message if no API key is configured
+  if (!apiKey) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
+        <div className="text-center text-gray-600 p-4">
+          <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="font-medium mb-1">Google Maps API-Key nicht konfiguriert</p>
+          <p className="text-sm">Bitte setzen Sie VITE_GOOGLE_MAPS_API_KEY in der .env Datei</p>
+        </div>
+      </div>
+    );
+  }
 
   // Blue marker icon for drivers
   const driverMarkerIcon = useMemo(() => {
