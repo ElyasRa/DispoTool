@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import orderRoutes from './routes/orderRoutes';
 import monteurRoutes from './routes/monteurRoutes';
+import mapDataRoutes from './routes/mapDataRoutes';
 import { initializeDatabase } from './config/db';
 
 dotenv.config();
@@ -38,6 +39,9 @@ app.use('/api/orders', orderRoutes);
 
 // Monteur routes
 app.use('/api/monteure', monteurRoutes);
+
+// Map data routes
+app.use('/api/map-data', mapDataRoutes);
 
 // Socket.io connection
 io.on('connection', (socket) => {

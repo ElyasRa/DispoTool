@@ -1,3 +1,5 @@
+import { Map } from '../components';
+
 function Dashboard() {
   return (
     <div className="p-6">
@@ -27,6 +29,16 @@ function Dashboard() {
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="text-2xl font-bold text-orange-600">0</div>
           <div className="text-gray-500 text-sm">Offene Rechnungen</div>
+        </div>
+      </div>
+
+      {/* Map Section */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Karte: Fahrer & Offene Aufträge
+        </h3>
+        <div className="h-[500px] rounded-lg overflow-hidden">
+          <Map />
         </div>
       </div>
     </div>
