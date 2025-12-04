@@ -20,15 +20,24 @@ const defaultCenter = {
   lng: 10.4515,
 };
 
-// Color configurations for order status
-const ORDER_COLORS: Record<string, string> = {
-  Neu: '#EF4444',           // Red
-  Zugewiesen: '#3B82F6',    // Blue
-  Angenommen: '#22C55E',    // Green
-  Erledigt: '#6B7280',      // Gray
-  Storno: '#F97316',        // Orange
-  Abgelehnt: '#F97316',     // Orange
+// Color configurations for order gewerk (trade type)
+const GEWERK_COLORS: Record<string, string> = {
+  Klempner: '#3B82F6',     // Blue for Sanitär/Plumbing
+  Elektro: '#EAB308',      // Yellow for Electrical
+  Heizung: '#EF4444',      // Red for Heating
 };
+
+// SVG path for a water droplet icon (for Sanitär/Plumbing)
+const SANITAER_PATH = 'M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z';
+
+// SVG path for a lightning bolt icon (for Elektro)
+const ELEKTRO_PATH = 'M7 2v11h3v9l7-12h-4l4-8z';
+
+// SVG path for a flame icon (for Heizung)
+const HEIZUNG_PATH = 'M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zm2 14h-4v-1h4v1zm0-2h-4v-1h4v1zm-2-3c-1.93 0-3.5-1.57-3.5-3.5S10.07 4 12 4s3.5 1.57 3.5 3.5S13.93 11 12 11z';
+
+// SVG path for a house icon (for Monteure)
+const HOUSE_PATH = 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z';
 
 function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: DispositionMapProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -84,29 +93,70 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
   }, [orders, monteure]);
 
   // Create marker icons only when Google Maps is loaded
+  // Uses gewerk (trade type) to determine marker appearance:
+  // - Klempner/Sanitär: Blue water droplet icon
+  // - Elektro: Yellow lightning bolt icon  
+  // - Heizung: Red flame icon
   const getOrderMarkerIcon = useMemo(() => {
     if (!isLoaded || typeof google === 'undefined') return () => undefined;
     
-    return (status: string) => ({
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor: ORDER_COLORS[status] || '#EF4444',
-      fillOpacity: 1,
-      strokeWeight: 2,
-      strokeColor: '#FFFFFF',
-      scale: 10,
-    });
+    return (gewerk: string): google.maps.Symbol => {
+      let path: string | google.maps.SymbolPath;
+      let fillColor: string;
+      let scale: number;
+      let anchor: google.maps.Point | undefined;
+
+      switch (gewerk) {
+        case 'Klempner': // Sanitär - Blue water droplet
+          path = SANITAER_PATH;
+          fillColor = GEWERK_COLORS.Klempner;
+          scale = 1.5;
+          anchor = new google.maps.Point(12, 22);
+          break;
+        case 'Elektro': // Electrical - Yellow lightning bolt
+          path = ELEKTRO_PATH;
+          fillColor = GEWERK_COLORS.Elektro;
+          scale = 1.8;
+          anchor = new google.maps.Point(10, 20);
+          break;
+        case 'Heizung': // Heating - Red flame
+          path = HEIZUNG_PATH;
+          fillColor = GEWERK_COLORS.Heizung;
+          scale = 1.5;
+          anchor = new google.maps.Point(12, 20);
+          break;
+        default:
+          // Use built-in circle symbol for unknown trade types
+          path = google.maps.SymbolPath.CIRCLE;
+          fillColor = '#EF4444';
+          scale = 10;
+          anchor = undefined;
+      }
+
+      return {
+        path,
+        fillColor,
+        fillOpacity: 1,
+        strokeWeight: 2,
+        strokeColor: '#FFFFFF',
+        scale,
+        anchor,
+      };
+    };
   }, [isLoaded]);
 
+  // Technician (Monteur) marker icon - House icon to represent their base/location
   const monteurMarkerIcon = useMemo(() => {
     if (!isLoaded || typeof google === 'undefined') return undefined;
     
     return {
-      path: google.maps.SymbolPath.CIRCLE,
+      path: HOUSE_PATH,
       fillColor: '#8B5CF6',      // Purple
       fillOpacity: 1,
-      strokeWeight: 3,
+      strokeWeight: 2,
       strokeColor: '#FFFFFF',
-      scale: 12,
+      scale: 1.5,
+      anchor: new google.maps.Point(12, 20),
     };
   }, [isLoaded]);
 
@@ -160,13 +210,13 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
           <Marker
             key={`order-${order.id}`}
             position={{ lat: order.latitude, lng: order.longitude }}
-            icon={getOrderMarkerIcon(order.status)}
+            icon={getOrderMarkerIcon(order.gewerk)}
             onClick={() => {
               setSelectedOrder(order);
               setSelectedMonteur(null);
               onOrderClick?.(order);
             }}
-            title={`${order.auftragsnummer} - ${order.status}`}
+            title={`${order.auftragsnummer} - ${order.gewerk}`}
           />
         );
       })}
@@ -209,7 +259,13 @@ function DispositionMap({ orders, monteure, onOrderClick, onMonteurClick }: Disp
             <p className="text-sm text-gray-600">
               {selectedOrder.plz} {selectedOrder.stadt}
             </p>
-            <div className="mt-2 pt-2 border-t">
+            <div className="mt-2 pt-2 border-t flex items-center gap-2">
+              <span 
+                className="text-xs font-medium px-2 py-1 rounded text-white"
+                style={{ backgroundColor: GEWERK_COLORS[selectedOrder.gewerk] || '#6B7280' }}
+              >
+                {selectedOrder.gewerk}
+              </span>
               <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100">
                 {selectedOrder.status}
               </span>

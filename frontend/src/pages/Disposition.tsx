@@ -495,13 +495,24 @@ function Disposition() {
     }));
   }, [mockMonteure]);
 
+  // Helper function to map category to Gewerk type
+  const categoryToGewerk = (category: 'elektro' | 'sanitär' | 'heizung'): 'Elektro' | 'Klempner' | 'Heizung' => {
+    switch (category) {
+      case 'elektro':
+        return 'Elektro';
+      case 'sanitär':
+        return 'Klempner';
+      case 'heizung':
+        return 'Heizung';
+    }
+  };
+
   // Transform openOrders to Auftrag[] with simulated coordinates around Berlin
-  // Note: Gewerk type only supports 'Elektro' | 'Klempner', so 'heizung' and 'sanitär' map to 'Klempner'
   const mockOrdersForMap: Auftrag[] = useMemo(() => {
     return openOrders.map((order, index) => ({
       id: order.id,
       auftragsnummer: order.orderNumber,
-      gewerk: order.category === 'elektro' ? 'Elektro' as const : 'Klempner' as const,
+      gewerk: categoryToGewerk(order.category),
       region: 'Berlin',
       auftraggeber_typ: 'Privat' as const,
       name: 'Kunde',
