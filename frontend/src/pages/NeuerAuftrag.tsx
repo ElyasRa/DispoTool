@@ -14,7 +14,8 @@ import {
   Hash,
   ClipboardList,
   MessageSquare,
-  Clock
+  Clock,
+  Info
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { orderApi } from '../services/api';
@@ -243,6 +244,7 @@ function NeuerAuftrag() {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
+  const [showOrderNumberInfo, setShowOrderNumberInfo] = useState<boolean>(false);
 
   // Handle input change
   const handleInputChange = useCallback((
@@ -250,6 +252,15 @@ function NeuerAuftrag() {
   ) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    setError('');
+  }, []);
+
+  // Handle PLZ input - only allow digits
+  const handlePlzChange = useCallback((
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    setFormData(prev => ({ ...prev, plz: value }));
     setError('');
   }, []);
 
@@ -262,13 +273,11 @@ function NeuerAuftrag() {
     }));
   }, []);
 
-  // Generate order number preview
+  // Toggle order number info display
   const handleGenerateNumber = useCallback(() => {
     // The actual number is generated on the backend
-    // This is just for user feedback
-    const today = new Date();
-    const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
-    alert(`Die Auftragsnummer wird beim Speichern automatisch generiert.\nFormat: ${datePrefix}-XXXXX`);
+    // This toggles the info message visibility
+    setShowOrderNumberInfo(prev => !prev);
   }, []);
 
   // Reset form
@@ -276,6 +285,7 @@ function NeuerAuftrag() {
     setFormData(initialFormData);
     setError('');
     setSuccess(false);
+    setShowOrderNumberInfo(false);
   }, []);
 
   // Submit form
@@ -405,6 +415,15 @@ function NeuerAuftrag() {
               <p className="text-sm text-gray-500">
                 Die Auftragsnummer wird automatisch beim Speichern generiert.
               </p>
+              {showOrderNumberInfo && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+                  <Info className="text-blue-500 mt-0.5 flex-shrink-0" size={16} />
+                  <div className="text-sm text-blue-700">
+                    <p className="font-medium">Format: YYYYMMDD-XXXXX</p>
+                    <p className="text-blue-600">Die Nummer wird automatisch beim Speichern vergeben und ist eindeutig.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Customer Information */}
@@ -572,10 +591,12 @@ function NeuerAuftrag() {
                     id="plz"
                     name="plz"
                     value={formData.plz}
-                    onChange={handleInputChange}
+                    onChange={handlePlzChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="10115"
                     maxLength={5}
+                    pattern="[0-9]{5}"
+                    inputMode="numeric"
                     required
                   />
                 </div>
