@@ -1,4 +1,4 @@
-import { useState, FormEvent, useCallback, useMemo, memo } from 'react';
+import { useState, FormEvent, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, 
@@ -8,44 +8,41 @@ import {
   Calendar, 
   AlertTriangle, 
   RefreshCw,
-  Save,
   X,
   Building2,
   ClipboardList,
   MessageSquare,
-  Clock,
   Info,
-  Mail
+  Check,
+  Lock
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { orderApi } from '../services/api';
-import { Gewerk, AuftraggeberTyp, AuftragStatus } from '../types/models';
+import { AuftraggeberTyp, AuftragStatus } from '../types/models';
 
 // Types for form state
 interface OrderFormData {
   // Customer Information
   auftraggeber_typ: AuftraggeberTyp;
-  vorname: string;
-  name: string;
+  ansprechpartner: string;
   telefon: string;
   email: string;
   
   // Service Address
-  strasse: string;
-  hausnummer: string;
+  strasse_hausnummer: string;
   plz: string;
-  stadt: string;
+  ort: string;
   region: string;
   latitude: number | null;
   longitude: number | null;
   
   // Order Details
-  gewerk: Gewerk;
+  schaden: string;
   beschreibung: string;
   
   // Appointment & Status
-  wunschtermin: string;
-  wunschzeit: string;
+  termin_vereinbart: boolean;
+  wartezeit_angeben: boolean;
   prioritaet: 'normal' | 'hoch' | 'dringend';
   status: AuftragStatus;
   
@@ -56,21 +53,19 @@ interface OrderFormData {
 // Initial form state
 const initialFormData: OrderFormData = {
   auftraggeber_typ: 'Privat',
-  vorname: '',
-  name: '',
+  ansprechpartner: '',
   telefon: '',
   email: '',
-  strasse: '',
-  hausnummer: '',
+  strasse_hausnummer: '',
   plz: '',
-  stadt: '',
-  region: 'Berlin',
+  ort: '',
+  region: '',
   latitude: null,
   longitude: null,
-  gewerk: 'Elektro',
+  schaden: '',
   beschreibung: '',
-  wunschtermin: '',
-  wunschzeit: '',
+  termin_vereinbart: false,
+  wartezeit_angeben: false,
   prioritaet: 'normal',
   status: 'Neu',
   interne_notizen: '',
@@ -80,17 +75,18 @@ const initialFormData: OrderFormData = {
 const mapContainerStyle = {
   width: '100%',
   height: '100%',
-  minHeight: '200px',
+  minHeight: '350px',
 };
 
-// Default center: Berlin
+// Default center: Madrid (as per requirements)
 const defaultCenter = {
-  lat: 52.52,
-  lng: 13.405,
+  lat: 40.416775,
+  lng: -3.703790,
 };
 
 // Regions available for selection
 const REGIONS = [
+  '',
   'Berlin',
   'Brandenburg',
   'Hamburg',
@@ -103,41 +99,29 @@ const REGIONS = [
   'Dresden',
 ];
 
-// Priority colors - more subtle styling
-const PRIORITY_COLORS = {
-  normal: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  hoch: 'bg-amber-50 text-amber-700 border-amber-200',
-  dringend: 'bg-rose-50 text-rose-700 border-rose-200',
-};
+// Damage/Schaden options (Gewerk)
+const SCHADEN_OPTIONS = [
+  { value: '', label: '-- Bitte wählen --' },
+  { value: 'Elektro', label: 'Elektro' },
+  { value: 'Klempner', label: 'Klempner' },
+  { value: 'Heizung', label: 'Heizung' },
+];
 
-// Compact input styles
-const inputBaseClass = "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all";
-const selectBaseClass = "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all";
-const labelClass = "block text-xs font-medium text-gray-600 mb-1";
+// Status options
+const STATUS_OPTIONS = [
+  { value: 'Neu', label: 'Undisponiert' },
+  { value: 'Zugewiesen', label: 'Zugewiesen' },
+  { value: 'Angenommen', label: 'Angenommen' },
+  { value: 'Erledigt', label: 'Erledigt' },
+  { value: 'Storno', label: 'Storno' },
+  { value: 'Abgelehnt', label: 'Abgelehnt' },
+];
 
-// Order number preview component
-interface OrderNumberPreviewProps {
-  onGenerate: () => void;
-}
-
-const OrderNumberPreview = memo(function OrderNumberPreview({ onGenerate }: OrderNumberPreviewProps) {
-  const today = new Date();
-  const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
-  
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs font-mono text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{datePrefix}-XXXXX</span>
-      <button
-        type="button"
-        onClick={onGenerate}
-        className="p-0.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-        title="Nummer generieren (wird bei Speichern automatisch erstellt)"
-      >
-        <RefreshCw size={12} />
-      </button>
-    </div>
-  );
-});
+// Styles
+const inputBaseClass = "w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all";
+const selectBaseClass = "w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all cursor-pointer";
+const labelClass = "block text-sm font-medium text-gray-700 mb-1";
+const sectionHeaderClass = "text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2";
 
 // Location selection map component
 interface LocationMapProps {
@@ -148,6 +132,7 @@ interface LocationMapProps {
 
 function LocationMap({ latitude, longitude, onLocationSelect }: LocationMapProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const [mapType, setMapType] = useState<'roadmap' | 'satellite'>('roadmap');
   
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
@@ -167,25 +152,13 @@ function LocationMap({ latitude, longitude, onLocationSelect }: LocationMapProps
     }
   }, [onLocationSelect]);
 
-  const markerIcon = useMemo(() => {
-    if (!isLoaded || typeof google === 'undefined') return undefined;
-    return {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor: '#3B82F6',
-      fillOpacity: 1,
-      strokeWeight: 2,
-      strokeColor: '#FFFFFF',
-      scale: 8,
-    };
-  }, [isLoaded]);
-
   if (!apiKey) {
     return (
-      <div className="h-full min-h-[200px] flex items-center justify-center bg-gray-50 rounded-md border border-gray-200">
-        <div className="text-center text-gray-500 p-3">
-          <MapPin className="w-8 h-8 mx-auto mb-1.5 text-gray-300" />
-          <p className="text-xs font-medium">Karte nicht verfügbar</p>
-          <p className="text-xs text-gray-400">API-Key nicht konfiguriert</p>
+      <div className="h-full min-h-[350px] flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200">
+        <div className="text-center text-gray-500 p-4">
+          <MapPin className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+          <p className="text-sm font-medium">Karte nicht verfügbar</p>
+          <p className="text-xs text-gray-400 mt-1">API-Key nicht konfiguriert</p>
         </div>
       </div>
     );
@@ -193,10 +166,10 @@ function LocationMap({ latitude, longitude, onLocationSelect }: LocationMapProps
 
   if (loadError) {
     return (
-      <div className="h-full min-h-[200px] flex items-center justify-center bg-gray-50 rounded-md border border-gray-200">
-        <div className="text-center text-gray-500 p-3">
-          <AlertTriangle className="w-8 h-8 mx-auto mb-1.5 text-red-400" />
-          <p className="text-xs font-medium">Fehler beim Laden</p>
+      <div className="h-full min-h-[350px] flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200">
+        <div className="text-center text-gray-500 p-4">
+          <AlertTriangle className="w-12 h-12 mx-auto mb-2 text-red-400" />
+          <p className="text-sm font-medium">Fehler beim Laden der Karte</p>
         </div>
       </div>
     );
@@ -204,34 +177,63 @@ function LocationMap({ latitude, longitude, onLocationSelect }: LocationMapProps
 
   if (!isLoaded) {
     return (
-      <div className="h-full min-h-[200px] flex items-center justify-center bg-gray-50 rounded-md border border-gray-200">
+      <div className="h-full min-h-[350px] flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200">
         <div className="text-center text-gray-500">
-          <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-1.5" />
-          <p className="text-xs">Lädt...</p>
+          <div className="animate-spin h-8 w-8 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-sm">Karte wird geladen...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-[200px] rounded-md overflow-hidden border border-gray-200">
+    <div className="h-full min-h-[350px] rounded-lg overflow-hidden border border-gray-200 relative">
+      {/* Map Type Tabs */}
+      <div className="absolute top-2 left-2 z-10 flex bg-white rounded shadow-md overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setMapType('roadmap')}
+          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+            mapType === 'roadmap' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          Karte
+        </button>
+        <button
+          type="button"
+          onClick={() => setMapType('satellite')}
+          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+            mapType === 'satellite' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          Satellit
+        </button>
+      </div>
+      
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
-        zoom={latitude && longitude ? 15 : 10}
+        zoom={latitude && longitude ? 15 : 6}
         onClick={handleMapClick}
+        mapTypeId={mapType}
         options={{
           disableDefaultUI: false,
           zoomControl: true,
           mapTypeControl: false,
           streetViewControl: false,
-          fullscreenControl: false,
+          fullscreenControl: true,
+          fullscreenControlOptions: {
+            position: typeof google !== 'undefined' ? google.maps.ControlPosition.TOP_RIGHT : 3,
+          },
         }}
       >
         {latitude && longitude && (
           <Marker
             position={{ lat: latitude, lng: longitude }}
-            icon={markerIcon}
             title="Einsatzort"
           />
         )}
@@ -246,22 +248,22 @@ function NeuerAuftrag() {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
-  const [showOrderNumberInfo, setShowOrderNumberInfo] = useState<boolean>(false);
 
   // Handle input change
   const handleInputChange = useCallback((
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    const newValue = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+    setFormData(prev => ({ ...prev, [name]: newValue }));
     setError('');
   }, []);
 
-  // Handle PLZ input - only allow digits
+  // Handle PLZ input - only allow digits, max 5
   const handlePlzChange = useCallback((
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    const value = e.target.value.replace(/\D/g, '').slice(0, 5);
     setFormData(prev => ({ ...prev, plz: value }));
     setError('');
   }, []);
@@ -275,20 +277,42 @@ function NeuerAuftrag() {
     }));
   }, []);
 
-  // Toggle order number info display
-  const handleGenerateNumber = useCallback(() => {
-    // The actual number is generated on the backend
-    // This toggles the info message visibility
-    setShowOrderNumberInfo(prev => !prev);
-  }, []);
-
   // Reset form
   const handleReset = useCallback(() => {
     setFormData(initialFormData);
     setError('');
     setSuccess(false);
-    setShowOrderNumberInfo(false);
   }, []);
+
+  // Parse ansprechpartner into vorname and name
+  const parseAnsprechpartner = (ansprechpartner: string): { vorname: string; name: string } => {
+    const parts = ansprechpartner.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return {
+        vorname: parts[0],
+        name: parts.slice(1).join(' '),
+      };
+    }
+    return {
+      vorname: ansprechpartner.trim(),
+      name: '',
+    };
+  };
+
+  // Parse strasse_hausnummer into strasse and hausnummer
+  const parseStrasseHausnummer = (strasseHausnummer: string): { strasse: string; hausnummer: string } => {
+    const match = strasseHausnummer.trim().match(/^(.+?)\s+(\d+\w*)$/);
+    if (match) {
+      return {
+        strasse: match[1],
+        hausnummer: match[2],
+      };
+    }
+    return {
+      strasse: strasseHausnummer.trim(),
+      hausnummer: '',
+    };
+  };
 
   // Submit form
   const handleSubmit = async (e: FormEvent) => {
@@ -297,13 +321,8 @@ function NeuerAuftrag() {
     setLoading(true);
 
     // Validate required fields
-    if (!formData.name.trim()) {
-      setError('Bitte geben Sie den Nachnamen des Kunden ein.');
-      setLoading(false);
-      return;
-    }
-    if (!formData.vorname.trim()) {
-      setError('Bitte geben Sie den Vornamen des Kunden ein.');
+    if (!formData.ansprechpartner.trim()) {
+      setError('Bitte geben Sie den Ansprechpartner ein.');
       setLoading(false);
       return;
     }
@@ -312,45 +331,48 @@ function NeuerAuftrag() {
       setLoading(false);
       return;
     }
-    if (!formData.strasse.trim()) {
-      setError('Bitte geben Sie die Straße ein.');
+    if (!formData.strasse_hausnummer.trim()) {
+      setError('Bitte geben Sie Straße & Hausnummer ein.');
       setLoading(false);
       return;
     }
-    if (!formData.hausnummer.trim()) {
-      setError('Bitte geben Sie die Hausnummer ein.');
+    if (!formData.plz.trim() || formData.plz.length !== 5) {
+      setError('Bitte geben Sie eine gültige 5-stellige PLZ ein.');
       setLoading(false);
       return;
     }
-    if (!formData.plz.trim()) {
-      setError('Bitte geben Sie die Postleitzahl ein.');
+    if (!formData.ort.trim()) {
+      setError('Bitte geben Sie den Ort ein.');
       setLoading(false);
       return;
     }
-    if (!formData.stadt.trim()) {
-      setError('Bitte geben Sie die Stadt ein.');
+    if (!formData.schaden) {
+      setError('Bitte wählen Sie einen Schaden/Gewerk aus.');
       setLoading(false);
       return;
     }
 
     try {
+      const { vorname, name } = parseAnsprechpartner(formData.ansprechpartner);
+      const { strasse, hausnummer } = parseStrasseHausnummer(formData.strasse_hausnummer);
+
       await orderApi.create({
         auftraggeber_typ: formData.auftraggeber_typ,
-        vorname: formData.vorname.trim(),
-        name: formData.name.trim(),
+        vorname: vorname,
+        name: name,
         telefon: formData.telefon.trim(),
-        strasse: formData.strasse.trim(),
-        hausnummer: formData.hausnummer.trim(),
+        strasse: strasse,
+        hausnummer: hausnummer,
         plz: formData.plz.trim(),
-        stadt: formData.stadt.trim(),
-        region: formData.region,
-        gewerk: formData.gewerk,
+        stadt: formData.ort.trim(),
+        region: formData.region || 'Berlin',
+        gewerk: formData.schaden as 'Elektro' | 'Klempner' | 'Heizung',
         latitude: formData.latitude,
         longitude: formData.longitude,
+        status: formData.status,
       });
 
       setSuccess(true);
-      // Reset form after short delay to show success
       setTimeout(() => {
         handleReset();
         navigate('/auftragsverwaltung');
@@ -363,129 +385,116 @@ function NeuerAuftrag() {
   };
 
   return (
-    <div className="p-4 max-w-7xl mx-auto">
-      {/* Compact Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-blue-100 rounded-lg">
-            <ClipboardList className="text-blue-600" size={20} />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-800">Neuer Auftrag</h1>
-            <p className="text-xs text-gray-500">Neuen Auftrag erfassen</p>
-          </div>
-        </div>
-        <OrderNumberPreview onGenerate={handleGenerateNumber} />
-      </div>
-
-      {/* Order number info (conditionally shown) */}
-      {showOrderNumberInfo && (
-        <div className="mb-3 p-2 bg-blue-50 border border-blue-100 rounded-md flex items-start gap-2">
-          <Info className="text-blue-500 mt-0.5 flex-shrink-0" size={14} />
-          <div className="text-xs text-blue-700">
-            <span className="font-medium">Format: YYYYMMDD-XXXXX</span> — Wird automatisch beim Speichern vergeben
-          </div>
-        </div>
-      )}
-
-      {/* Success Message - Compact */}
-      {success && (
-        <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-md p-2.5 flex items-center gap-2">
-          <Save className="text-emerald-600" size={16} />
-          <div className="text-sm">
-            <span className="font-medium text-emerald-800">Auftrag erstellt!</span>
-            <span className="text-emerald-600 ml-1">Weiterleitung...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Error Message - Compact */}
-      {error && (
-        <div className="mb-3 bg-rose-50 border border-rose-200 rounded-md p-2.5 flex items-center gap-2">
-          <AlertTriangle className="text-rose-500" size={16} />
-          <span className="text-sm text-rose-700">{error}</span>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Main Form - Left/Center */}
-          <div className="lg:col-span-8 space-y-3">
-            {/* Row 1: Customer Information & Service Address */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Customer Information Card */}
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5 pb-2 border-b border-gray-100">
-                  <User className="text-blue-500" size={15} />
-                  Kundeninformationen
-                </h2>
-                
-                {/* Customer Type - Inline */}
-                <div className="flex gap-3 mb-3">
-                  <label className="flex items-center gap-1.5 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="auftraggeber_typ"
-                      value="Privat"
-                      checked={formData.auftraggeber_typ === 'Privat'}
-                      onChange={handleInputChange}
-                      className="w-3.5 h-3.5 text-blue-600"
-                    />
-                    <User size={12} className="text-gray-400" />
-                    <span className="text-gray-600">Privat</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="auftraggeber_typ"
-                      value="Firma"
-                      checked={formData.auftraggeber_typ === 'Firma'}
-                      onChange={handleInputChange}
-                      className="w-3.5 h-3.5 text-blue-600"
-                    />
-                    <Building2 size={12} className="text-gray-400" />
-                    <span className="text-gray-600">Firma</span>
-                  </label>
+    <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Main Grid: Form (Left) + Map (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Form */}
+          <div className="lg:col-span-2">
+            {/* Header */}
+            <div className="bg-purple-100 rounded-t-xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-200 rounded-lg">
+                  <ClipboardList className="text-purple-700" size={24} />
                 </div>
+                <h1 className="text-xl font-bold text-purple-900">Neuer Auftrag</h1>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors border border-purple-200"
+                  onClick={() => {}}
+                >
+                  <RefreshCw size={14} />
+                  Nummer generieren
+                </button>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-lg text-sm border border-yellow-300">
+                  <Info size={14} />
+                  Keine Nummer
+                </div>
+              </div>
+            </div>
 
-                <div className="space-y-2.5">
-                  {/* Name Row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label htmlFor="vorname" className={labelClass}>Vorname *</label>
+            {/* Form Content */}
+            <div className="bg-white rounded-b-xl shadow-sm border border-gray-200 border-t-0 p-6">
+              {/* Success Message */}
+              {success && (
+                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                  <div className="p-1 bg-green-100 rounded-full">
+                    <Check className="text-green-600" size={20} />
+                  </div>
+                  <div>
+                    <span className="font-semibold text-green-800">Auftrag erstellt!</span>
+                    <span className="text-green-600 ml-2">Sie werden weitergeleitet...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {error && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+                  <AlertTriangle className="text-red-500" size={20} />
+                  <span className="text-red-700">{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+                {/* Kundeninformationen */}
+                <div className="mb-6">
+                  <h2 className={sectionHeaderClass}>
+                    <User className="text-blue-500" size={18} />
+                    Kundeninformationen
+                  </h2>
+                  
+                  {/* Customer Type Radio Buttons */}
+                  <div className="flex gap-6 mb-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
-                        type="text"
-                        id="vorname"
-                        name="vorname"
-                        value={formData.vorname}
+                        type="radio"
+                        name="auftraggeber_typ"
+                        value="Privat"
+                        checked={formData.auftraggeber_typ === 'Privat'}
                         onChange={handleInputChange}
-                        className={inputBaseClass}
-                        placeholder="Max"
-                        required
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                       />
-                    </div>
-                    <div>
-                      <label htmlFor="name" className={labelClass}>Nachname *</label>
+                      <User size={16} className="text-gray-500" />
+                      <span className="text-sm text-gray-700">Privat</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={formData.name}
+                        type="radio"
+                        name="auftraggeber_typ"
+                        value="Firma"
+                        checked={formData.auftraggeber_typ === 'Firma'}
                         onChange={handleInputChange}
-                        className={inputBaseClass}
-                        placeholder="Mustermann"
-                        required
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                       />
-                    </div>
+                      <Building2 size={16} className="text-gray-500" />
+                      <span className="text-sm text-gray-700">Firma</span>
+                    </label>
                   </div>
 
-                  {/* Contact Row */}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="ansprechpartner" className={labelClass}>
+                        Ansprechpartner <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="ansprechpartner"
+                        name="ansprechpartner"
+                        value={formData.ansprechpartner}
+                        onChange={handleInputChange}
+                        className={inputBaseClass}
+                        placeholder="Max Mustermann"
+                        required
+                      />
+                    </div>
                     <div>
                       <label htmlFor="telefon" className={labelClass}>
                         <span className="flex items-center gap-1">
-                          <Phone size={10} className="text-gray-400" />
-                          Telefon *
+                          <Phone size={14} className="text-gray-400" />
+                          Telefon <span className="text-red-500">*</span>
                         </span>
                       </label>
                       <input
@@ -499,69 +508,39 @@ function NeuerAuftrag() {
                         required
                       />
                     </div>
-                    <div>
-                      <label htmlFor="email" className={labelClass}>
-                        <span className="flex items-center gap-1">
-                          <Mail size={10} className="text-gray-400" />
-                          E-Mail
-                        </span>
-                      </label>
-                      <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className={inputBaseClass}
-                        placeholder="kunde@beispiel.de"
-                      />
-                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Service Address Card */}
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5 pb-2 border-b border-gray-100">
-                  <MapPin className="text-rose-500" size={15} />
-                  Einsatzadresse
-                </h2>
-                
-                <div className="space-y-2.5">
-                  {/* Street Row */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="col-span-3">
-                      <label htmlFor="strasse" className={labelClass}>Straße *</label>
+                {/* Einsatzadresse */}
+                <div className="mb-6">
+                  <h2 className={sectionHeaderClass}>
+                    <MapPin className="text-red-500" size={18} />
+                    Einsatzadresse
+                  </h2>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="md:col-span-2">
+                      <label htmlFor="strasse_hausnummer" className={labelClass}>
+                        Straße & Hausnummer <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
-                        id="strasse"
-                        name="strasse"
-                        value={formData.strasse}
+                        id="strasse_hausnummer"
+                        name="strasse_hausnummer"
+                        value={formData.strasse_hausnummer}
                         onChange={handleInputChange}
                         className={inputBaseClass}
-                        placeholder="Musterstraße"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="hausnummer" className={labelClass}>Nr. *</label>
-                      <input
-                        type="text"
-                        id="hausnummer"
-                        name="hausnummer"
-                        value={formData.hausnummer}
-                        onChange={handleInputChange}
-                        className={inputBaseClass}
-                        placeholder="12a"
+                        placeholder="Musterstraße 12a"
                         required
                       />
                     </div>
                   </div>
-
-                  {/* City Row */}
-                  <div className="grid grid-cols-4 gap-2">
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label htmlFor="plz" className={labelClass}>PLZ *</label>
+                      <label htmlFor="plz" className={labelClass}>
+                        PLZ <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
                         id="plz"
@@ -571,97 +550,69 @@ function NeuerAuftrag() {
                         className={inputBaseClass}
                         placeholder="10115"
                         maxLength={5}
-                        pattern="[0-9]{5}"
                         inputMode="numeric"
                         required
                       />
                     </div>
-                    <div className="col-span-3">
-                      <label htmlFor="stadt" className={labelClass}>Stadt *</label>
+                    <div>
+                      <label htmlFor="ort" className={labelClass}>
+                        Ort <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
-                        id="stadt"
-                        name="stadt"
-                        value={formData.stadt}
+                        id="ort"
+                        name="ort"
+                        value={formData.ort}
                         onChange={handleInputChange}
                         className={inputBaseClass}
                         placeholder="Berlin"
                         required
                       />
                     </div>
-                  </div>
-
-                  {/* Region */}
-                  <div>
-                    <label htmlFor="region" className={labelClass}>Region</label>
-                    <select
-                      id="region"
-                      name="region"
-                      value={formData.region}
-                      onChange={handleInputChange}
-                      className={selectBaseClass}
-                    >
-                      {REGIONS.map(region => (
-                        <option key={region} value={region}>{region}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Coordinates display */}
-                  {formData.latitude && formData.longitude && (
-                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                      <MapPin size={10} />
-                      {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Row 2: Order Details & Appointment */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Order Details Card */}
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5 pb-2 border-b border-gray-100">
-                  <FileText className="text-amber-500" size={15} />
-                  Auftragsdetails
-                </h2>
-                
-                <div className="space-y-2.5">
-                  {/* Trade & Priority Row */}
-                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label htmlFor="gewerk" className={labelClass}>Gewerk *</label>
+                      <label htmlFor="region" className={labelClass}>Region</label>
                       <select
-                        id="gewerk"
-                        name="gewerk"
-                        value={formData.gewerk}
+                        id="region"
+                        name="region"
+                        value={formData.region}
+                        onChange={handleInputChange}
+                        className={selectBaseClass}
+                      >
+                        {REGIONS.map(region => (
+                          <option key={region} value={region}>{region || '-- Bitte wählen --'}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auftragsdetails */}
+                <div className="mb-6">
+                  <h2 className={sectionHeaderClass}>
+                    <FileText className="text-orange-500" size={18} />
+                    Auftragsdetails
+                  </h2>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label htmlFor="schaden" className={labelClass}>
+                        Schaden <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="schaden"
+                        name="schaden"
+                        value={formData.schaden}
                         onChange={handleInputChange}
                         className={selectBaseClass}
                         required
                       >
-                        <option value="Elektro">⚡ Elektro</option>
-                        <option value="Klempner">💧 Klempner</option>
-                        <option value="Heizung">🔥 Heizung</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="prioritaet" className={labelClass}>Priorität</label>
-                      <select
-                        id="prioritaet"
-                        name="prioritaet"
-                        value={formData.prioritaet}
-                        onChange={handleInputChange}
-                        className={`${selectBaseClass} ${PRIORITY_COLORS[formData.prioritaet]}`}
-                      >
-                        <option value="normal">Normal</option>
-                        <option value="hoch">Hoch</option>
-                        <option value="dringend">Dringend</option>
+                        {SCHADEN_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
-
-                  {/* Description */}
+                  
                   <div>
                     <label htmlFor="beschreibung" className={labelClass}>Beschreibung</label>
                     <textarea
@@ -671,56 +622,94 @@ function NeuerAuftrag() {
                       onChange={handleInputChange}
                       rows={3}
                       className={`${inputBaseClass} resize-none`}
-                      placeholder="Schaden oder gewünschte Leistung..."
+                      placeholder="Beschreiben Sie den Schaden oder die gewünschte Leistung..."
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Appointment & Status Card */}
-              <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5 pb-2 border-b border-gray-100">
-                  <Calendar className="text-violet-500" size={15} />
-                  Termin & Status
-                </h2>
-                
-                <div className="space-y-2.5">
-                  {/* Date & Time Row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label htmlFor="wunschtermin" className={labelClass}>
-                        <span className="flex items-center gap-1">
-                          <Calendar size={10} className="text-gray-400" />
-                          Wunschtermin
-                        </span>
-                      </label>
+                {/* Termin & Status */}
+                <div className="mb-6">
+                  <h2 className={sectionHeaderClass}>
+                    <Calendar className="text-purple-500" size={18} />
+                    Termin & Status
+                  </h2>
+                  
+                  {/* Checkboxes */}
+                  <div className="flex flex-wrap gap-6 mb-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
-                        type="date"
-                        id="wunschtermin"
-                        name="wunschtermin"
-                        value={formData.wunschtermin}
+                        type="checkbox"
+                        name="termin_vereinbart"
+                        checked={formData.termin_vereinbart}
                         onChange={handleInputChange}
-                        className={inputBaseClass}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                       />
-                    </div>
-                    <div>
-                      <label htmlFor="wunschzeit" className={labelClass}>
-                        <span className="flex items-center gap-1">
-                          <Clock size={10} className="text-gray-400" />
-                          Wunschzeit
-                        </span>
-                      </label>
+                      <span className="text-sm text-gray-700">Termin vereinbart?</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
-                        type="time"
-                        id="wunschzeit"
-                        name="wunschzeit"
-                        value={formData.wunschzeit}
+                        type="checkbox"
+                        name="wartezeit_angeben"
+                        checked={formData.wartezeit_angeben}
                         onChange={handleInputChange}
-                        className={inputBaseClass}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                       />
+                      <span className="text-sm text-gray-700">Wartezeit angeben?</span>
+                    </label>
+                  </div>
+                  
+                  {/* Priority Radio Buttons */}
+                  <div className="mb-4">
+                    <label className={labelClass}>Priorität</label>
+                    <div className="flex gap-4 mt-1">
+                      <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors ${
+                        formData.prioritaet === 'normal' 
+                          ? 'bg-yellow-100 border-yellow-300 text-yellow-800' 
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="prioritaet"
+                          value="normal"
+                          checked={formData.prioritaet === 'normal'}
+                          onChange={handleInputChange}
+                          className="w-4 h-4 text-yellow-600 focus:ring-yellow-500"
+                        />
+                        <span className="text-sm font-medium">Mittel</span>
+                      </label>
+                      <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors ${
+                        formData.prioritaet === 'hoch' 
+                          ? 'bg-orange-100 border-orange-300 text-orange-800' 
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="prioritaet"
+                          value="hoch"
+                          checked={formData.prioritaet === 'hoch'}
+                          onChange={handleInputChange}
+                          className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-sm font-medium">Hoch</span>
+                      </label>
+                      <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors ${
+                        formData.prioritaet === 'dringend' 
+                          ? 'bg-red-100 border-red-300 text-red-800' 
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="prioritaet"
+                          value="dringend"
+                          checked={formData.prioritaet === 'dringend'}
+                          onChange={handleInputChange}
+                          className="w-4 h-4 text-red-600 focus:ring-red-500"
+                        />
+                        <span className="text-sm font-medium">Dringend</span>
+                      </label>
                     </div>
                   </div>
-
+                  
                   {/* Status */}
                   <div>
                     <label htmlFor="status" className={labelClass}>Status</label>
@@ -731,97 +720,110 @@ function NeuerAuftrag() {
                       onChange={handleInputChange}
                       className={selectBaseClass}
                     >
-                      <option value="Neu">Neu</option>
-                      <option value="Zugewiesen">Zugewiesen</option>
-                      <option value="Angenommen">Angenommen</option>
-                      <option value="Erledigt">Erledigt</option>
-                      <option value="Storno">Storno</option>
-                      <option value="Abgelehnt">Abgelehnt</option>
+                      {STATUS_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
                     </select>
                   </div>
+                </div>
 
-                  {/* Internal Notes */}
-                  <div>
-                    <label htmlFor="interne_notizen" className={labelClass}>
-                      <span className="flex items-center gap-1">
-                        <MessageSquare size={10} className="text-gray-400" />
-                        Interne Notizen
-                      </span>
-                    </label>
-                    <textarea
-                      id="interne_notizen"
-                      name="interne_notizen"
-                      value={formData.interne_notizen}
-                      onChange={handleInputChange}
-                      rows={2}
-                      className={`${inputBaseClass} resize-none`}
-                      placeholder="Interne Notizen..."
-                    />
+                {/* Interne Notiz */}
+                <div className="mb-6">
+                  <h2 className={sectionHeaderClass}>
+                    <MessageSquare className="text-gray-500" size={18} />
+                    Interne Notiz
+                  </h2>
+                  
+                  <textarea
+                    id="interne_notizen"
+                    name="interne_notizen"
+                    value={formData.interne_notizen}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className={`${inputBaseClass} resize-none`}
+                    placeholder="Interne Notizen hier eingeben..."
+                  />
+                  
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <Lock size={12} />
+                    <span>Nur für Disponenten, Admin, Betriebsleiter und Buchhaltung sichtbar</span>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Action Buttons - Compact */}
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                disabled={loading}
-              >
-                <X size={14} />
-                Abbrechen
-              </button>
-              <button
-                type="submit"
-                disabled={loading || success}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
-                    <span>Erstellen...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save size={14} />
-                    <span>Auftrag erstellen</span>
-                  </>
-                )}
-              </button>
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                    disabled={loading}
+                  >
+                    <X size={18} />
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading || success}
+                    className="flex items-center gap-2 px-5 py-2.5 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                        <span>Erstellen...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={18} />
+                        <span>Auftrag erstellen</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
 
-          {/* Right Column - Map (Compact) */}
-          <div className="lg:col-span-4">
-            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 sticky top-4">
-              <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                <MapPin className="text-blue-500" size={14} />
-                Standort
-              </h2>
-              <p className="text-xs text-gray-400 mb-2">
-                Klicken Sie auf die Karte
-              </p>
-              <div className="h-[280px]">
-                <LocationMap
-                  latitude={formData.latitude}
-                  longitude={formData.longitude}
-                  onLocationSelect={handleLocationSelect}
-                />
+          {/* Right Column - Map */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-4">
+              {/* Map Header */}
+              <div className="bg-blue-50 p-4 border-b border-blue-100">
+                <h2 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+                  <MapPin className="text-blue-600" size={18} />
+                  Einsatzort auf Karte
+                </h2>
               </div>
-              {formData.latitude && formData.longitude && (
-                <div className="mt-2 p-2 bg-blue-50 rounded-md">
-                  <p className="text-xs font-medium text-blue-700">Standort ausgewählt</p>
-                  <p className="text-xs text-blue-500 font-mono">
-                    {formData.latitude.toFixed(5)}, {formData.longitude.toFixed(5)}
-                  </p>
+              
+              {/* Map Container */}
+              <div className="p-4">
+                <div className="h-[400px]">
+                  <LocationMap
+                    latitude={formData.latitude}
+                    longitude={formData.longitude}
+                    onLocationSelect={handleLocationSelect}
+                  />
                 </div>
-              )}
+                
+                {/* Coordinates Display */}
+                {formData.latitude && formData.longitude && (
+                  <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <p className="text-xs font-semibold text-blue-800 mb-1">Ausgewählte Koordinaten:</p>
+                    <p className="text-sm text-blue-700 font-mono">
+                      {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+                    </p>
+                  </div>
+                )}
+                
+                {!formData.latitude && !formData.longitude && (
+                  <p className="mt-3 text-xs text-gray-500 text-center">
+                    Klicken Sie auf die Karte, um den Einsatzort zu markieren
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
