@@ -15,4 +15,10 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 4173,
+    host: true,
+  },
+  // Enable SPA fallback for the build output
+  appType: 'spa',
 });
