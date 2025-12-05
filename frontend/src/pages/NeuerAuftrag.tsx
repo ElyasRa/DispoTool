@@ -1,8 +1,11 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Save, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { Gewerk, AuftraggeberTyp } from '../types/models';
 import { orderApi } from '../services/api';
+
+// Type for string-only form fields (excluding enum types)
+type StringFormFields = 'region' | 'name' | 'vorname' | 'telefon' | 'strasse' | 'hausnummer' | 'plz' | 'stadt';
 
 // Form data interface for new order
 interface NewOrderFormData {
@@ -44,6 +47,18 @@ function NeuerAuftrag() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  
+  // Ref to track if component is mounted for safe navigation
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   // Handle input changes
   const handleChange = (
@@ -129,7 +144,8 @@ function NeuerAuftrag() {
       setFormData(initialFormData);
       
       // Redirect to Auftragsverwaltung after a brief delay
-      setTimeout(() => {
+      // Use ref to track and cleanup timeout on unmount
+      timeoutRef.current = setTimeout(() => {
         navigate('/auftragsverwaltung');
       }, 1500);
     } catch (error) {
@@ -150,6 +166,7 @@ function NeuerAuftrag() {
   };
 
   // Input field component with error handling
+  // Restricted to string-only fields to ensure type safety
   const InputField = ({
     label,
     name,
@@ -159,7 +176,7 @@ function NeuerAuftrag() {
     className = '',
   }: {
     label: string;
-    name: keyof NewOrderFormData;
+    name: StringFormFields;
     type?: string;
     placeholder?: string;
     required?: boolean;
