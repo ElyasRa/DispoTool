@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { orderApi } from '../services/api';
-import { AuftraggeberTyp, AuftragStatus } from '../types/models';
+import { Gewerk, AuftraggeberTyp, AuftragStatus } from '../types/models';
 
 // Types for form state
 interface OrderFormData {
@@ -37,7 +37,7 @@ interface OrderFormData {
   longitude: number | null;
   
   // Order Details
-  schaden: string;
+  schaden: Gewerk | '';
   beschreibung: string;
   
   // Appointment & Status
@@ -179,7 +179,7 @@ function LocationMap({ latitude, longitude, onLocationSelect }: LocationMapProps
     return (
       <div className="h-full min-h-[350px] flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200">
         <div className="text-center text-gray-500">
-          <div className="animate-spin h-8 w-8 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
+          <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
           <p className="text-sm">Karte wird geladen...</p>
         </div>
       </div>
@@ -365,8 +365,8 @@ function NeuerAuftrag() {
         hausnummer: hausnummer,
         plz: formData.plz.trim(),
         stadt: formData.ort.trim(),
-        region: formData.region || 'Berlin',
-        gewerk: formData.schaden as 'Elektro' | 'Klempner' | 'Heizung',
+        region: formData.region || REGIONS[1], // Default to first real region (Berlin)
+        gewerk: formData.schaden as Gewerk,
         latitude: formData.latitude,
         longitude: formData.longitude,
         status: formData.status,
