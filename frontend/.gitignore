@@ -8,6 +8,8 @@ dist/
 .env
 .env.local
 .env.*.local
+# But allow example files
+!.env.example
 
 # IDE
 .vscode/

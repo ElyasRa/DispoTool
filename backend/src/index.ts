@@ -21,8 +21,15 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || 3000;
 
+// CORS configuration - allow frontend to connect
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Basic health check route
@@ -38,6 +45,20 @@ app.use('/api/orders', orderRoutes);
 
 // Monteur routes
 app.use('/api/monteure', monteurRoutes);
+
+// 404 handler - must come after all other routes
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Global error handler - must be last middleware
+app.use((err: Error, _req: Request, res: Response, _next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined 
+  });
+});
 
 // Socket.io connection
 io.on('connection', (socket) => {
